@@ -25,6 +25,7 @@ func testIndexer_Get(t *testing.T, indexer Indexer) {
 	bar := HintEntry{Key: []byte("bar"), Pos: data.RecordPos{Fid: 1, Offset: 2, Size: 3}}
 	foo := HintEntry{Key: []byte("foo"), Pos: data.RecordPos{Fid: 4, Offset: 5, Size: 6}}
 	bob := HintEntry{Key: []byte("bob"), Pos: data.RecordPos{Fid: 7, Offset: 8, Size: 9}}
+	nilE := HintEntry{Key: nil}
 
 	indexer.Put(bar)
 	indexer.Put(foo)
@@ -40,21 +41,33 @@ func testIndexer_Get(t *testing.T, indexer Indexer) {
 	getBob, eBob := indexer.Get(bob.Key)
 	assert.False(t, eBob)
 	assert.Nil(t, getBob.Key)
+
+	get, b := indexer.Get(nilE.Key)
+	assert.Nil(t, get.Key)
+	assert.False(t, b)
 }
 
 func testIndexer_Put(t *testing.T, indexer Indexer) {
 	bar := HintEntry{Key: []byte("bar"), Pos: data.RecordPos{Fid: 1, Offset: 2, Size: 3}}
 	foo := HintEntry{Key: []byte("foo"), Pos: data.RecordPos{Fid: 4, Offset: 5, Size: 6}}
+	nilE := HintEntry{Key: nil}
 
-	oldBar := indexer.Put(bar)
+	oldBar, errBar := indexer.Put(bar)
 	assert.Nil(t, oldBar.Key)
+	assert.Nil(t, errBar)
 
-	oldFoo := indexer.Put(foo)
+	oldFoo, errFoo := indexer.Put(foo)
 	assert.Nil(t, oldFoo.Key)
+	assert.Nil(t, errFoo)
 
-	oldFoo = indexer.Put(foo)
+	oldFoo, errFoo = indexer.Put(foo)
 	assert.NotNil(t, oldFoo.Key)
+	assert.Nil(t, errFoo)
 	assert.Equal(t, foo.Pos, oldFoo.Pos)
+
+	oldNil, errNil := indexer.Put(nilE)
+	assert.Nil(t, oldNil.Key)
+	assert.Equal(t, ErrNilKey, errNil)
 }
 
 func testIndexer_Del(t *testing.T, indexer Indexer) {

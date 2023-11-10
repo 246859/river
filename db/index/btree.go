@@ -34,19 +34,30 @@ func (b *BTree) Iterator(asc bool) Iterator {
 }
 
 func (b *BTree) Get(key Key) (HintEntry, bool) {
+	if key == nil {
+		return HintEntry{}, false
+	}
+
 	idx := HintEntry{Key: key}
 	oldIdx, exist := b.tree.Get(idx)
 	return oldIdx, exist
 }
 
-func (b *BTree) Put(entry HintEntry) HintEntry {
+func (b *BTree) Put(entry HintEntry) (HintEntry, error) {
+	if entry.Key == nil {
+		return HintEntry{}, ErrNilKey
+	}
 	b.mutex.Lock()
 	oldIdxe, _ := b.tree.ReplaceOrInsert(entry)
 	b.mutex.Unlock()
-	return oldIdxe
+	return oldIdxe, nil
 }
 
 func (b *BTree) Del(key Key) (HintEntry, bool) {
+	if key == nil {
+		return HintEntry{}, false
+	}
+
 	idxe := HintEntry{Key: key}
 	b.mutex.Lock()
 	oldIdxe, exist := b.tree.Delete(idxe)

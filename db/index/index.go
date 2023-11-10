@@ -2,7 +2,12 @@ package index
 
 import (
 	"bytes"
+	"errors"
 	"github.com/246859/river/db/data"
+)
+
+var (
+	ErrNilKey = errors.New("key is nil")
 )
 
 type Key = []byte
@@ -26,7 +31,8 @@ type Indexer interface {
 	Get(key Key) (HintEntry, bool)
 	// Put inserts a new entry into the index
 	// replace it if already exists, then returns old entry
-	Put(entry HintEntry) HintEntry
+	// key must not be nil
+	Put(entry HintEntry) (HintEntry, error)
 	// Del deletes the entry that matching the given key from the index, and returns old entry
 	// if not exist, returns zero-value, false
 	Del(key Key) (HintEntry, bool)
