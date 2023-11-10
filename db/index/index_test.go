@@ -22,9 +22,9 @@ func TestIndexer(t *testing.T) {
 }
 
 func testIndexer_Get(t *testing.T, indexer Indexer) {
-	bar := Entry{Key: []byte("bar"), Pos: data.RecordPos{Fid: 1, Offset: 2, Size: 3}}
-	foo := Entry{Key: []byte("foo"), Pos: data.RecordPos{Fid: 4, Offset: 5, Size: 6}}
-	bob := Entry{Key: []byte("bob"), Pos: data.RecordPos{Fid: 7, Offset: 8, Size: 9}}
+	bar := HintEntry{Key: []byte("bar"), Pos: data.RecordPos{Fid: 1, Offset: 2, Size: 3}}
+	foo := HintEntry{Key: []byte("foo"), Pos: data.RecordPos{Fid: 4, Offset: 5, Size: 6}}
+	bob := HintEntry{Key: []byte("bob"), Pos: data.RecordPos{Fid: 7, Offset: 8, Size: 9}}
 
 	indexer.Put(bar)
 	indexer.Put(foo)
@@ -43,8 +43,8 @@ func testIndexer_Get(t *testing.T, indexer Indexer) {
 }
 
 func testIndexer_Put(t *testing.T, indexer Indexer) {
-	bar := Entry{Key: []byte("bar"), Pos: data.RecordPos{Fid: 1, Offset: 2, Size: 3}}
-	foo := Entry{Key: []byte("foo"), Pos: data.RecordPos{Fid: 4, Offset: 5, Size: 6}}
+	bar := HintEntry{Key: []byte("bar"), Pos: data.RecordPos{Fid: 1, Offset: 2, Size: 3}}
+	foo := HintEntry{Key: []byte("foo"), Pos: data.RecordPos{Fid: 4, Offset: 5, Size: 6}}
 
 	oldBar := indexer.Put(bar)
 	assert.Nil(t, oldBar.Key)
@@ -58,9 +58,9 @@ func testIndexer_Put(t *testing.T, indexer Indexer) {
 }
 
 func testIndexer_Del(t *testing.T, indexer Indexer) {
-	bar := Entry{Key: []byte("bar"), Pos: data.RecordPos{Fid: 1, Offset: 2, Size: 3}}
-	foo := Entry{Key: []byte("foo"), Pos: data.RecordPos{Fid: 4, Offset: 5, Size: 6}}
-	bob := Entry{Key: []byte("bob"), Pos: data.RecordPos{Fid: 7, Offset: 8, Size: 9}}
+	bar := HintEntry{Key: []byte("bar"), Pos: data.RecordPos{Fid: 1, Offset: 2, Size: 3}}
+	foo := HintEntry{Key: []byte("foo"), Pos: data.RecordPos{Fid: 4, Offset: 5, Size: 6}}
+	bob := HintEntry{Key: []byte("bob"), Pos: data.RecordPos{Fid: 7, Offset: 8, Size: 9}}
 
 	indexer.Put(bar)
 	indexer.Put(foo)
@@ -79,7 +79,7 @@ func testIndexer_Del(t *testing.T, indexer Indexer) {
 }
 
 func testIndexer_Iterator(t *testing.T, indexer Indexer) {
-	entries := []Entry{
+	entries := []HintEntry{
 		{Key: []byte("bar"), Pos: data.RecordPos{Fid: 1, Offset: 2, Size: 3}},
 		{Key: []byte("foo"), Pos: data.RecordPos{Fid: 4, Offset: 5, Size: 6}},
 		{Key: []byte("bob"), Pos: data.RecordPos{Fid: 7, Offset: 8, Size: 9}},
@@ -93,6 +93,12 @@ func testIndexer_Iterator(t *testing.T, indexer Indexer) {
 	it := indexer.Iterator(true)
 
 	for entry := it.Next(); entry.Key != nil; {
+		assert.NotNil(t, entry.Key)
+	}
+
+	dit := indexer.Iterator(false)
+
+	for entry := dit.Next(); entry.Key != nil; {
 		assert.NotNil(t, entry.Key)
 	}
 
