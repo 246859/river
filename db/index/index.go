@@ -7,15 +7,15 @@ import (
 
 type Key = []byte
 
-// Entry represent an index entry in indexes struct
-type Entry struct {
+// HintEntry represent an index entry in indexes struct
+type HintEntry struct {
 	Key Key
 	Pos data.RecordPos
 }
 
 // Compare
 // -1-less, 0-equal, 1-larger
-func (i Entry) Compare(idx Entry) int {
+func (i HintEntry) Compare(idx HintEntry) int {
 	return bytes.Compare(i.Key, idx.Key)
 }
 
@@ -23,13 +23,13 @@ func (i Entry) Compare(idx Entry) int {
 type Indexer interface {
 	// Get returns the entry matching the given key
 	// if not exist, returns zero-value, false
-	Get(key Key) (Entry, bool)
+	Get(key Key) (HintEntry, bool)
 	// Put inserts a new entry into the index
 	// replace it if already exists, then returns old entry
-	Put(entry Entry) Entry
+	Put(entry HintEntry) HintEntry
 	// Del deletes the entry that matching the given key from the index, and returns old entry
 	// if not exist, returns zero-value, false
-	Del(key Key) (Entry, bool)
+	Del(key Key) (HintEntry, bool)
 	// Size return num of all entries in index
 	Size() int
 	// Iterator returns an iterator of index snapshots at a certain moment
@@ -46,7 +46,7 @@ type Iterator interface {
 	// Seek set cursor to an as close as possible position that near the given key in entries snapshots
 	Seek(key Key)
 	// Next move the cursor to next, return false if it has no next entry
-	Next() Entry
+	Next() HintEntry
 	// Close releases the resources and close iterator
 	Close() error
 }
