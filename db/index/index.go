@@ -2,12 +2,7 @@ package index
 
 import (
 	"bytes"
-	"errors"
 	"github.com/246859/river/db/data"
-)
-
-var (
-	ErrNilKey = errors.New("key is nil")
 )
 
 type Key = []byte
@@ -15,7 +10,7 @@ type Key = []byte
 // HintEntry represent an index entry in indexes struct
 type HintEntry struct {
 	Key Key
-	Pos data.RecordPos
+	Pos data.EntryHint
 }
 
 // Compare

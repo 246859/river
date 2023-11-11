@@ -1,6 +1,7 @@
 package index
 
 import (
+	"github.com/246859/river/db/data"
 	"github.com/google/btree"
 	"sort"
 	"sync"
@@ -20,7 +21,7 @@ func IdxBtree(degree int) *BTree {
 }
 
 // BTree is btree implementation of Indexer that
-// allows the actions of finding data, sequential access, inserting data, and deleting to be done in logarithmic time
+// allows the actions of finding data, sequential access, inserting data, and deleting to be done in O(log n) time
 type BTree struct {
 	tree  *btree.BTreeG[HintEntry]
 	mutex sync.RWMutex
@@ -45,7 +46,7 @@ func (b *BTree) Get(key Key) (HintEntry, bool) {
 
 func (b *BTree) Put(entry HintEntry) (HintEntry, error) {
 	if entry.Key == nil {
-		return HintEntry{}, ErrNilKey
+		return HintEntry{}, data.ErrNilKey
 	}
 	b.mutex.Lock()
 	oldIdxe, _ := b.tree.ReplaceOrInsert(entry)
