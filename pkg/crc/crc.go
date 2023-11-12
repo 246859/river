@@ -1,4 +1,4 @@
-package data
+package crc
 
 import (
 	"hash/crc32"
