@@ -12,7 +12,7 @@ var (
 	_ Iterator = &BTreeIterator{}
 )
 
-func IdxBtree(degree int) *BTree {
+func BtreeIdx(degree int) *BTree {
 	bi := new(BTree)
 	bi.tree = btree.NewG[HintEntry](degree, func(a, b HintEntry) bool {
 		return a.Compare(b) < 0

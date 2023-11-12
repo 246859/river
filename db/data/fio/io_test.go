@@ -12,7 +12,7 @@ import (
 func Test(t *testing.T) {
 	ios := []func(string) (IO, error){
 		func(filename string) (IO, error) {
-			return NewFileIO(filename)
+			return OpenStdFile(filename)
 		},
 	}
 

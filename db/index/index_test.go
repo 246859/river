@@ -9,7 +9,7 @@ import (
 func TestIndexer(t *testing.T) {
 	indexers := []func() Indexer{
 		func() Indexer {
-			return IdxBtree(32)
+			return BtreeIdx(32)
 		},
 	}
 

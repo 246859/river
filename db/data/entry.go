@@ -2,6 +2,7 @@ package data
 
 import (
 	"encoding/binary"
+	"github.com/246859/river/pkg/crc"
 	"github.com/pkg/errors"
 )
 
@@ -45,7 +46,7 @@ type UnMarshaler interface {
 }
 
 type defaultEntryMarshaler struct {
-	crc Crc32
+	crc crc.Crc32
 }
 
 func (d defaultEntryMarshaler) MarshalEntry(entry Entry) ([]byte, error) {
@@ -107,7 +108,7 @@ func (d defaultEntryMarshaler) UnMarshalEntry(bytes []byte) (Entry, error) {
 	return entry, nil
 }
 
-var defaultMarshaler = defaultEntryMarshaler{crc: KoopmanCrcSum}
+var defaultMarshaler = defaultEntryMarshaler{crc: crc.KoopmanCrcSum}
 
 func MarshalEntry(entry Entry) ([]byte, error) {
 	return defaultMarshaler.MarshalEntry(entry)
