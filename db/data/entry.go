@@ -84,7 +84,7 @@ func (d defaultEntryMarshaler) MarshalEntry(entry Entry) ([]byte, error) {
 	copy(entryBytes[offset+ksz:], entry.Value)
 
 	// compute crc check sum
-	crcSum := d.crc(entryBytes[4:])
+	crcSum := d.crc.Sum(entryBytes[4:])
 	binary.LittleEndian.PutUint32(entryBytes[:4], crcSum)
 
 	return entryBytes, nil
@@ -108,7 +108,7 @@ func (d defaultEntryMarshaler) UnMarshalEntry(bytes []byte) (Entry, error) {
 	return entry, nil
 }
 
-var defaultMarshaler = defaultEntryMarshaler{crc: crc.KoopmanCrcSum}
+var defaultMarshaler = defaultEntryMarshaler{crc: crc.IEEE32}
 
 func MarshalEntry(entry Entry) ([]byte, error) {
 	return defaultMarshaler.MarshalEntry(entry)

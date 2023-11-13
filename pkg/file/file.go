@@ -5,6 +5,15 @@ import (
 	"path/filepath"
 )
 
+const (
+	B = 1 << (iota * 10)
+	KB
+	MB
+	GB
+	TB
+	PB
+)
+
 func Open(filename string, flag int, mode os.FileMode) (*os.File, error) {
 	dir := filepath.Dir(filename)
 	if dir != "." {
