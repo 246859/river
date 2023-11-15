@@ -83,7 +83,7 @@ func newFBtree(degree int) *btree.BTreeG[F] {
 // returns active wal file and immutable wal files
 func loadDataDir(dir string, ext string, cache *lruCache, bufferPool *bytebufferpool.Pool) (File, []File, error) {
 	// try to mkdir
-	err := os.MkdirAll(dir, os.ModeDir)
+	err := os.MkdirAll(dir, os.ModePerm)
 	if err != nil {
 		return nil, nil, err
 	}

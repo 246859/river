@@ -12,7 +12,7 @@ import (
 )
 
 var test_option = Option{
-	DataDir: path.Join(".", DefaultWalSuffix),
+	DataDir: path.Join(os.TempDir(), DefaultWalSuffix),
 	// max file 5 MB
 	MaxFileSize:    file.MB * 5,
 	Ext:            DefaultWalSuffix,
@@ -41,6 +41,7 @@ func clean(wal *Wal) {
 }
 
 func TestWal_Load(t *testing.T) {
+	t.TempDir()
 	wal := tempWal(test_option)
 	assert.True(t, wal.IsEmpty())
 	defer clean(wal)
