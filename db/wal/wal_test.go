@@ -12,7 +12,7 @@ import (
 )
 
 var test_option = Option{
-	DataDir: path.Join(os.TempDir(), DefaultWalSuffix),
+	DataDir: path.Join(".", DefaultWalSuffix),
 	// max file 5 MB
 	MaxFileSize:    file.MB * 5,
 	Ext:            DefaultWalSuffix,
