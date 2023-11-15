@@ -1,2 +1,2 @@
 # river
-light-weight kv database base on memory
+light-weight kv database base on bitcask
