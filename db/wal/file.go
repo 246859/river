@@ -458,7 +458,7 @@ func (log *LogFile) Iterator() (ChunkIterator, error) {
 
 func (log *LogFile) Remove() error {
 	err := log.Close()
-	if !errors.Is(err, ErrAlreadyClosed) {
+	if err != nil && !errors.Is(err, ErrAlreadyClosed) {
 		return err
 	}
 	return os.Remove(log.fd.Name())
