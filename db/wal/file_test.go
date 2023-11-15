@@ -23,6 +23,17 @@ func newLogFile(fid uint32) *LogFile {
 	return file
 }
 
+func TestLogFile_Write_Immutable(t *testing.T) {
+	file := newLogFile(1)
+	defer file.Remove()
+
+	file.MarkImmutable()
+
+	data := []byte(strings.Repeat("a", 100))
+	_, err := file.Write(data)
+	assert.ErrorIs(t, err, ErrWriteToImmutable)
+}
+
 func TestLogFile_Write_Full(t *testing.T) {
 	{
 		// write chunk full data whose size far less than block size

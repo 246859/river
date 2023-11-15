@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	ErrAlreadyClosed = errors.New("file already closed")
-	ErrBlockExceeded = errors.New("block size exceeded")
+	ErrAlreadyClosed    = errors.New("file already closed")
+	ErrBlockExceeded    = errors.New("block size exceeded")
+	ErrWriteToImmutable = errors.New("write to immutable")
 )
 
 type ChunkType = byte
@@ -53,6 +54,8 @@ type ChunkPos struct {
 
 // File represents a wal file
 type File interface {
+	// Fid return file id
+	Fid() uint32
 	// Read bytes with specified block and offset
 	// chunkOffset is offset by the start of the specified block
 	Read(block uint32, chunkOffset int64) ([]byte, error)
@@ -68,12 +71,18 @@ type File interface {
 	Remove() error
 	// Sync buffer to disk
 	Sync() error
+	// MarkImmutable mark this file as immutable
+	MarkImmutable()
 	// Close file and release resource
 	Close() error
 }
 
 // ChunkIterator iterate chunk data for a log file
 type ChunkIterator interface {
+	// File returns file that iterator belongs to
+	File() File
+	// Index returns current chunk position
+	Index() ChunkPos
 	// Next returns the next chunk data bytes, chunk info, and error
 	Next() ([]byte, ChunkPos, error)
 }
@@ -128,7 +137,12 @@ type LogFile struct {
 	blockCache *lruCache
 	bufferPool *bytebufferpool.Pool
 
-	closed bool
+	closed    bool
+	immutable bool
+}
+
+func (log *LogFile) Fid() uint32 {
+	return log.fid
 }
 
 func (log *LogFile) Read(block uint32, chunkOffset int64) ([]byte, error) {
@@ -170,7 +184,7 @@ func (log *LogFile) read(block uint32, chunkOffset int64) ([]byte, ChunkPos, err
 		}
 
 		var (
-			cacheKey    = cacheKey(log.fid, block)
+			cacheKey    = blockCacheKey(log.fid, block)
 			hitCache    bool
 			cachedBlock []byte
 		)
@@ -261,6 +275,11 @@ func (log *LogFile) WriteAll(data [][]byte) ([]ChunkPos, error) {
 		poss         = make([]ChunkPos, len(data))
 		err          error
 	)
+
+	// write to immutable
+	if log.immutable {
+		return poss, ErrWriteToImmutable
+	}
 
 	// load bytes buffer
 	buffer := log.bufferPool.Get()
@@ -438,7 +457,10 @@ func (log *LogFile) Iterator() (ChunkIterator, error) {
 }
 
 func (log *LogFile) Remove() error {
-	_ = log.Close()
+	err := log.Close()
+	if !errors.Is(err, ErrAlreadyClosed) {
+		return err
+	}
 	return os.Remove(log.fd.Name())
 }
 
@@ -453,6 +475,10 @@ func (log *LogFile) Sync() error {
 	return log.fd.Sync()
 }
 
+func (log *LogFile) MarkImmutable() {
+	log.immutable = true
+}
+
 func (log *LogFile) Close() error {
 	if log.closed {
 		return ErrAlreadyClosed
@@ -465,6 +491,18 @@ type LogFileChunkIterator struct {
 	f           *LogFile
 	block       uint32
 	chunkOffset int64
+}
+
+func (l *LogFileChunkIterator) Index() ChunkPos {
+	return ChunkPos{
+		Fid:    l.f.Fid(),
+		Block:  l.block,
+		Offset: l.chunkOffset,
+	}
+}
+
+func (l *LogFileChunkIterator) File() File {
+	return l.f
 }
 
 func (l *LogFileChunkIterator) Next() ([]byte, ChunkPos, error) {
