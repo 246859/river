@@ -25,7 +25,9 @@ func newLogFile(fid uint32) *LogFile {
 
 func TestLogFile_Write_Immutable(t *testing.T) {
 	file := newLogFile(1)
-	defer file.Remove()
+	defer func() {
+		assert.Nil(t, file.Remove())
+	}()
 
 	file.MarkImmutable()
 
@@ -38,7 +40,9 @@ func TestLogFile_Write_Full(t *testing.T) {
 	{
 		// write chunk full data whose size far less than block size
 		file := newLogFile(1)
-		defer file.Remove()
+		defer func() {
+			assert.Nil(t, file.Remove())
+		}()
 
 		// #1
 		{
@@ -67,7 +71,9 @@ func TestLogFile_Write_Full(t *testing.T) {
 func TestLogFile_Write_FullBlock(t *testing.T) {
 	// write chunk data full of block
 	file := newLogFile(1)
-	defer file.Remove()
+	defer func() {
+		assert.Nil(t, file.Remove())
+	}()
 	data := []byte(strings.Repeat("a", maxBlockSize-chunkHeaderSize))
 	pos, err := file.Write(data)
 	assert.Nil(t, err)
@@ -85,7 +91,9 @@ func TestLogFile_Write_FullBlock(t *testing.T) {
 
 func TestLogFile_Write_Padding(t *testing.T) {
 	file := newLogFile(1)
-	defer file.Remove()
+	defer func() {
+		assert.Nil(t, file.Remove())
+	}()
 	// left block space = 6 bytes, could not hold a chunkheader which is 7 bytes
 	data := []byte(strings.Repeat("a", maxBlockSize-chunkHeaderSize-6))
 	pos, err := file.Write(data)
@@ -101,7 +109,9 @@ func TestLogFile_Write_Padding(t *testing.T) {
 
 func TestLogFile_Write_First_Middle_Last(t *testing.T) {
 	file := newLogFile(1)
-	defer file.Remove()
+	defer func() {
+		assert.Nil(t, file.Remove())
+	}()
 
 	// fist-last
 	data := []byte(strings.Repeat("a", maxBlockSize+chunkHeaderSize))
@@ -118,7 +128,9 @@ func TestLogFile_Write_First_Middle_Last(t *testing.T) {
 
 func TestLogFile_Read_Full(t *testing.T) {
 	file := newLogFile(1)
-	defer file.Remove()
+	defer func() {
+		assert.Nil(t, file.Remove())
+	}()
 
 	data := []byte(strings.Repeat("r", 100))
 	pos, err := file.Write(data)
@@ -139,7 +151,9 @@ func TestLogFile_Read_Full(t *testing.T) {
 
 func TestLogFile_Read_Padding(t *testing.T) {
 	file := newLogFile(1)
-	defer file.Remove()
+	defer func() {
+		assert.Nil(t, file.Remove())
+	}()
 	// left block space = 6 bytes, could not hold a chunkheader which is 7 bytes
 	data := []byte(strings.Repeat("a", maxBlockSize-chunkHeaderSize-6))
 	pos, err := file.Write(data)
@@ -160,7 +174,9 @@ func TestLogFile_Read_Padding(t *testing.T) {
 
 func TestLogFile_WriteAll(t *testing.T) {
 	file := newLogFile(1)
-	defer file.Remove()
+	defer func() {
+		assert.Nil(t, file.Remove())
+	}()
 
 	datas := [][]byte{
 		// full
@@ -189,7 +205,9 @@ func TestLogFile_WriteAll(t *testing.T) {
 
 func TestLogFile_Read_First_Middle_Last(t *testing.T) {
 	file := newLogFile(1)
-	defer file.Remove()
+	defer func() {
+		assert.Nil(t, file.Remove())
+	}()
 
 	// fist-last
 	data := []byte(strings.Repeat("a", maxBlockSize+chunkHeaderSize))
@@ -214,7 +232,9 @@ func TestLogFile_Read_First_Middle_Last(t *testing.T) {
 
 func TestLogFile_Write_Read_ManyChunks(t *testing.T) {
 	file := newLogFile(1)
-	defer file.Remove()
+	defer func() {
+		assert.Nil(t, file.Remove())
+	}()
 
 	// fist-last
 	data := []byte(strings.Repeat("a", maxBlockSize+100))
@@ -255,7 +275,9 @@ func TestLogFile_Write_Read_ManyChunks(t *testing.T) {
 
 func TestLogFile_Iterator(t *testing.T) {
 	file := newLogFile(1)
-	defer file.Remove()
+	defer func() {
+		assert.Nil(t, file.Remove())
+	}()
 
 	datas := [][]byte{
 		// full
@@ -336,6 +358,6 @@ func TestLogFile_BigData(t *testing.T) {
 			i++
 		}
 
-		file.Remove()
+		assert.Nil(t, file.Remove())
 	}
 }
