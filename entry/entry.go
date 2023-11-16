@@ -102,7 +102,7 @@ type HintUnMarshaler interface {
 	UnMarshalHint(rawdata []byte) (Hint, error)
 }
 
-type Data interface {
+type Serializer interface {
 	Marshaler
 	UnMarshaler
 	HeaderMarshaler
@@ -157,6 +157,10 @@ func Validate(entry Entry) error {
 	return nil
 }
 
+func UnixMill() int64 {
+	return time.Now().UnixMilli()
+}
+
 func IsExpired(ttl int64) bool {
-	return ttl <= time.Now().UnixMilli()
+	return ttl <= UnixMill()
 }
