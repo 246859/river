@@ -1,15 +1,17 @@
 package index
 
 import (
-	"github.com/246859/river/db/data"
+	"bytes"
+	"github.com/246859/river/db/entry"
 	"github.com/stretchr/testify/assert"
+	"sort"
 	"testing"
 )
 
 func TestIndexer(t *testing.T) {
-	indexers := []func() Indexer{
-		func() Indexer {
-			return BtreeIdx(32)
+	indexers := []func() Index{
+		func() Index {
+			return BtreeIndex(32)
 		},
 	}
 
@@ -21,11 +23,11 @@ func TestIndexer(t *testing.T) {
 	}
 }
 
-func testIndexer_Get(t *testing.T, indexer Indexer) {
-	bar := HintEntry{Key: []byte("bar"), Pos: data.EntryHint{Fid: 1, Offset: 2, Size: 3}}
-	foo := HintEntry{Key: []byte("foo"), Pos: data.EntryHint{Fid: 4, Offset: 5, Size: 6}}
-	bob := HintEntry{Key: []byte("bob"), Pos: data.EntryHint{Fid: 7, Offset: 8, Size: 9}}
-	nilE := HintEntry{Key: nil}
+func testIndexer_Get(t *testing.T, indexer Index) {
+	bar := Hint{Key: []byte("bar"), Hint: entry.Hint{Fid: 1, Offset: 2}}
+	foo := Hint{Key: []byte("foo"), Hint: entry.Hint{Fid: 4, Offset: 5}}
+	bob := Hint{Key: []byte("bob"), Hint: entry.Hint{Fid: 7, Offset: 8}}
+	nilE := Hint{Key: nil}
 
 	indexer.Put(bar)
 	indexer.Put(foo)
@@ -47,73 +49,75 @@ func testIndexer_Get(t *testing.T, indexer Indexer) {
 	assert.False(t, b)
 }
 
-func testIndexer_Put(t *testing.T, indexer Indexer) {
-	bar := HintEntry{Key: []byte("bar"), Pos: data.EntryHint{Fid: 1, Offset: 2, Size: 3}}
-	foo := HintEntry{Key: []byte("foo"), Pos: data.EntryHint{Fid: 4, Offset: 5, Size: 6}}
-	nilE := HintEntry{Key: nil}
+func testIndexer_Put(t *testing.T, indexer Index) {
+	bar := Hint{Key: []byte("bar"), Hint: entry.Hint{Fid: 1, Offset: 2}}
+	foo := Hint{Key: []byte("foo"), Hint: entry.Hint{Fid: 4, Offset: 5}}
+	nilE := Hint{Key: nil}
 
-	oldBar, errBar := indexer.Put(bar)
-	assert.Nil(t, oldBar.Key)
-	assert.Nil(t, errBar)
+	err := indexer.Put(bar)
+	assert.Nil(t, err)
 
-	oldFoo, errFoo := indexer.Put(foo)
-	assert.Nil(t, oldFoo.Key)
-	assert.Nil(t, errFoo)
+	err = indexer.Put(foo)
+	assert.Nil(t, err)
 
-	oldFoo, errFoo = indexer.Put(foo)
-	assert.NotNil(t, oldFoo.Key)
-	assert.Nil(t, errFoo)
-	assert.Equal(t, foo.Pos, oldFoo.Pos)
+	err = indexer.Put(foo)
+	assert.Nil(t, err)
 
-	oldNil, errNil := indexer.Put(nilE)
-	assert.Nil(t, oldNil.Key)
-	assert.Equal(t, data.ErrNilKey, errNil)
+	err = indexer.Put(nilE)
+	assert.ErrorIs(t, err, entry.ErrNilKey)
 }
 
-func testIndexer_Del(t *testing.T, indexer Indexer) {
-	bar := HintEntry{Key: []byte("bar"), Pos: data.EntryHint{Fid: 1, Offset: 2, Size: 3}}
-	foo := HintEntry{Key: []byte("foo"), Pos: data.EntryHint{Fid: 4, Offset: 5, Size: 6}}
-	bob := HintEntry{Key: []byte("bob"), Pos: data.EntryHint{Fid: 7, Offset: 8, Size: 9}}
+func testIndexer_Del(t *testing.T, indexer Index) {
+	bar := Hint{Key: []byte("bar"), Hint: entry.Hint{Fid: 1, Offset: 2}}
+	foo := Hint{Key: []byte("foo"), Hint: entry.Hint{Fid: 4, Offset: 5}}
+	bob := Hint{Key: []byte("bob"), Hint: entry.Hint{Fid: 7, Offset: 8}}
 
-	indexer.Put(bar)
-	indexer.Put(foo)
+	err := indexer.Put(bar)
+	assert.Nil(t, err)
+	err = indexer.Put(foo)
+	assert.Nil(t, err)
 
-	oldBar, eBar := indexer.Del(bar.Key)
-	assert.True(t, eBar)
-	assert.Equal(t, bar, oldBar)
+	e, err := indexer.Del(bar.Key)
+	assert.True(t, e)
+	assert.Nil(t, err)
 
-	oldFoo, eFoo := indexer.Del(foo.Key)
-	assert.True(t, eFoo)
-	assert.Equal(t, foo, oldFoo)
+	e, err = indexer.Del(foo.Key)
+	assert.True(t, e)
+	assert.Nil(t, err)
 
-	oldBob, eBob := indexer.Del(bob.Key)
-	assert.False(t, eBob)
-	assert.Nil(t, oldBob.Key)
+	e, err = indexer.Del(bob.Key)
+	assert.False(t, e)
+	assert.Nil(t, err)
 }
 
-func testIndexer_Iterator(t *testing.T, indexer Indexer) {
-	entries := []HintEntry{
-		{Key: []byte("bar"), Pos: data.EntryHint{Fid: 1, Offset: 2, Size: 3}},
-		{Key: []byte("foo"), Pos: data.EntryHint{Fid: 4, Offset: 5, Size: 6}},
-		{Key: []byte("bob"), Pos: data.EntryHint{Fid: 7, Offset: 8, Size: 9}},
-		{Key: []byte("jack"), Pos: data.EntryHint{Fid: 10, Offset: 11, Size: 12}},
+func testIndexer_Iterator(t *testing.T, indexer Index) {
+	hints := []Hint{
+		{Key: []byte("bob"), Hint: entry.Hint{Fid: 1, Offset: 2}},
+		{Key: []byte("jack"), Hint: entry.Hint{Fid: 4, Offset: 5}},
+		{Key: []byte("aaa"), Hint: entry.Hint{Fid: 7, Offset: 8}},
+		{Key: []byte("adas"), Hint: entry.Hint{Fid: 10, Offset: 11}},
 	}
 
-	for _, entry := range entries {
-		indexer.Put(entry)
+	for _, h := range hints {
+		err := indexer.Put(h)
+		assert.Nil(t, err)
 	}
 
-	it := indexer.Iterator(true)
+	sort.Slice(hints, func(i, j int) bool {
+		return bytes.Compare(hints[i].Key, hints[j].Key) < 0
+	})
 
-	for entry := it.Next(); entry.Key != nil; {
-		assert.NotNil(t, entry.Key)
+	iterator, err := indexer.Iterator(RangeOption{})
+	assert.Nil(t, err)
+	assert.NotNil(t, iterator)
+
+	var i int
+	for {
+		next, hasNext := iterator.Next()
+		if !hasNext {
+			break
+		}
+		assert.EqualValues(t, hints[i], next)
+		i++
 	}
-
-	dit := indexer.Iterator(false)
-
-	for entry := dit.Next(); entry.Key != nil; {
-		assert.NotNil(t, entry.Key)
-	}
-
-	assert.Nil(t, it.Next().Key)
 }

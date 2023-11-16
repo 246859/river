@@ -1,69 +1,75 @@
 package index
 
 import (
-	"github.com/246859/river/db/data"
+	"fmt"
+	"github.com/246859/river/db/entry"
+	"github.com/246859/river/pkg/str"
 	"github.com/google/btree"
-	"sort"
+	"regexp"
+	"slices"
 	"sync"
 )
 
 var (
-	_ Indexer  = &BTree{}
+	_ Index    = &BTree{}
 	_ Iterator = &BTreeIterator{}
 )
 
-func BtreeIdx(degree int) *BTree {
+func BtreeIndex(degree int) *BTree {
 	bi := new(BTree)
-	bi.tree = btree.NewG[HintEntry](degree, func(a, b HintEntry) bool {
+	bi.tree = btree.NewG[Hint](degree, func(a, b Hint) bool {
 		return a.Compare(b) < 0
 	})
 	return bi
 }
 
-// BTree is btree implementation of Indexer that
+// BTree is btree implementation of Index that
 // allows the actions of finding data, sequential access, inserting data, and deleting to be done in O(log n) time
 type BTree struct {
-	tree  *btree.BTreeG[HintEntry]
+	tree  *btree.BTreeG[Hint]
 	mutex sync.RWMutex
 }
 
-func (b *BTree) Iterator(asc bool) Iterator {
+func (b *BTree) Iterator(opt RangeOption) (Iterator, error) {
 	b.mutex.RLock()
-	iterator := NewBTreeIterator(b, asc)
-	b.mutex.RUnlock()
-	return iterator
+	defer b.mutex.RUnlock()
+	return newBTreeIterator(b, opt)
 }
 
-func (b *BTree) Get(key Key) (HintEntry, bool) {
+func (b *BTree) Get(key Key) (Hint, bool) {
 	if key == nil {
-		return HintEntry{}, false
+		return Hint{}, false
 	}
 
-	idx := HintEntry{Key: key}
+	idx := Hint{Key: key}
 	oldIdx, exist := b.tree.Get(idx)
 	return oldIdx, exist
 }
 
-func (b *BTree) Put(entry HintEntry) (HintEntry, error) {
-	if entry.Key == nil {
-		return HintEntry{}, data.ErrNilKey
+func (b *BTree) Put(h Hint) error {
+	if h.Key == nil {
+		return entry.ErrNilKey
 	}
 	b.mutex.Lock()
-	oldIdxe, _ := b.tree.ReplaceOrInsert(entry)
+
+	b.tree.ReplaceOrInsert(h)
+
 	b.mutex.Unlock()
-	return oldIdxe, nil
+	return nil
 }
 
-func (b *BTree) Del(key Key) (HintEntry, bool) {
+func (b *BTree) Del(key Key) (bool, error) {
 	if key == nil {
-		return HintEntry{}, false
+		return false, entry.ErrNilKey
 	}
 
-	idxe := HintEntry{Key: key}
 	b.mutex.Lock()
-	oldIdxe, exist := b.tree.Delete(idxe)
-	b.mutex.Unlock()
-	return oldIdxe, exist
+	defer b.mutex.Unlock()
+
+	hint := Hint{Key: key}
+	_, exist := b.tree.Delete(hint)
+
+	return exist, nil
 }
 
 func (b *BTree) Size() int {
@@ -74,61 +80,94 @@ func (b *BTree) Close() error {
 	return nil
 }
 
-func NewBTreeIterator(btr *BTree, asc bool) Iterator {
+func newBTreeIterator(btr *BTree, opt RangeOption) (Iterator, error) {
 
-	var idx int
-	entries := make([]HintEntry, btr.Size())
+	var (
+		minHint  = Hint{Key: opt.Min}
+		maxHint  = Hint{Key: opt.max}
+		pattern  = str.BytesToString(opt.pattern)
+		iterator Iterator
+	)
 
-	itFn := func(item HintEntry) bool {
-		entries[idx] = item
-		idx++
+	if minHint.Key != nil && maxHint.Key != nil && minHint.Compare(maxHint) > 0 {
+		return iterator, fmt.Errorf("max must be greater equal than min")
+	}
+
+	var reg *regexp.Regexp
+	if pattern != "" {
+		compile, err := regexp.Compile(pattern)
+		if err != nil {
+			return iterator, err
+		}
+		reg = compile
+	}
+
+	hints := make([]Hint, 0, 200)
+
+	searchFn := func(h Hint) bool {
+		candidate := true
+		if reg != nil {
+			candidate = reg.Match(h.Key)
+		}
+		if candidate {
+			hints = append(hints, h)
+		}
 		return true
 	}
 
-	if asc {
-		btr.tree.Ascend(itFn)
+	// all keys
+	if minHint.Key == nil && maxHint.Key == nil {
+		btr.tree.Ascend(searchFn)
+		// less than max
+	} else if minHint.Key == nil {
+		maxHint.Key = append(maxHint.Key, 0)
+		btr.tree.AscendLessThan(maxHint, searchFn)
+		// greater than min
+	} else if maxHint.Key == nil {
+		btr.tree.AscendGreaterOrEqual(minHint, searchFn)
+		// range
 	} else {
-		btr.tree.Descend(itFn)
+		maxHint.Key = append(maxHint.Key, 0)
+		btr.tree.AscendRange(minHint, maxHint, searchFn)
 	}
 
-	return &BTreeIterator{
-		entries: entries,
-		asc:     asc,
-		cursor:  -1,
+	if opt.Descend {
+		slices.Reverse(hints)
 	}
+
+	iterator = &BTreeIterator{
+		hints:  hints,
+		cursor: -1,
+	}
+
+	return iterator, nil
 }
 
 type BTreeIterator struct {
-	entries []HintEntry
-	asc     bool
-	cursor  int
+	hints  []Hint
+	cursor int
 }
 
-func (bi *BTreeIterator) Next() HintEntry {
-	if bi.cursor < len(bi.entries) {
-		bi.cursor++
+func (bi *BTreeIterator) Next() (Hint, bool) {
+	var (
+		hint    Hint
+		hasNext bool
+	)
+
+	bi.cursor++
+	if bi.cursor < len(bi.hints) {
+		hint = bi.hints[bi.cursor]
 	}
-	bi.cursor = len(bi.entries)
-	return bi.Entry()
+
+	if bi.cursor < len(bi.hints)-1 {
+		hasNext = true
+	}
+
+	return hint, hasNext
 }
 
 func (bi *BTreeIterator) Rewind() {
 	bi.cursor = 0
-}
-
-func (bi *BTreeIterator) Seek(key Key) {
-	n := len(bi.entries)
-	searchIdx := HintEntry{Key: key}
-	bi.cursor = sort.Search(n, func(i int) bool {
-		return (bi.asc && bi.entries[i].Compare(searchIdx) <= 0) || (!bi.asc && bi.entries[i].Compare(searchIdx) >= 0)
-	})
-}
-
-func (bi *BTreeIterator) Entry() HintEntry {
-	if 0 <= bi.cursor && bi.cursor < len(bi.entries) {
-		return bi.entries[bi.cursor]
-	}
-	return HintEntry{}
 }
 
 func (bi *BTreeIterator) Close() error {

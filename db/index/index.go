@@ -2,52 +2,62 @@ package index
 
 import (
 	"bytes"
-	"github.com/246859/river/db/data"
+	"github.com/246859/river/db/entry"
 )
 
 type Key = []byte
 
-// HintEntry represent an index entry in indexes struct
-type HintEntry struct {
-	Key Key
-	Pos data.EntryHint
+// RangeOption range [min, max] keys option
+type RangeOption struct {
+	// min key
+	Min Key
+	// max key
+	max Key
+
+	// pattern matching
+	pattern Key
+
+	// return order of elements
+	Descend bool
+}
+
+// Hint represents a kev hint data
+type Hint struct {
+	Key  Key
+	Hint entry.Hint
 }
 
 // Compare
 // -1-less, 0-equal, 1-larger
-func (i HintEntry) Compare(idx HintEntry) int {
+func (i Hint) Compare(idx Hint) int {
 	return bytes.Compare(i.Key, idx.Key)
 }
 
-// Indexer storage a set of index entries and define index operation apis that implemented by concrete data struct.
-type Indexer interface {
+// Index storage a set of index hints and define index operation apis that implemented by concrete data struct.
+type Index interface {
 	// Get returns the entry matching the given key
 	// if not exist, returns zero-value, false
-	Get(key Key) (HintEntry, bool)
-	// Put inserts a new entry into the index
-	// replace it if already exists, then returns old entry
-	// key must not be nil
-	Put(entry HintEntry) (HintEntry, error)
-	// Del deletes the entry that matching the given key from the index, and returns old entry
-	// if not exist, returns zero-value, false
-	Del(key Key) (HintEntry, bool)
-	// Size return num of all entries in index
+	Get(key Key) (Hint, bool)
+	// Put inserts a new entry into the index, replace it if already exists
+	Put(entry Hint) error
+	// Del deletes the entry that matching the given key from the index, and returns true
+	// if not exist, returns false
+	Del(key Key) (bool, error)
+	// Size return num of all hints in index
 	Size() int
 	// Iterator returns an iterator of index snapshots at a certain moment
-	Iterator(asc bool) Iterator
+	Iterator(opt RangeOption) (Iterator, error)
 	// Close releases the resources and close indexer
 	Close() error
 }
 
-// Iterator record snapshot of index entries at a certain moment, iterate them in the given order by cursor
+// Iterator record snapshot of index hints at a certain moment, iterate them in the given order by cursor
 // depending on the implementation of indexer, the behavior of iterator may be different, like hashmap or btree
 type Iterator interface {
-	// Rewind set cursor to the head of entries snapshots
+	// Rewind set cursor to the head of hints snapshots
 	Rewind()
-	// Seek set cursor to an as close as possible position that near the given key in entries snapshots
-	Seek(key Key)
-	// Next move the cursor to next, return false if it has no next entry
-	Next() HintEntry
+	// Next returns the Hint on the cursor, return false if it has no next hint
+	Next() (Hint, bool)
 	// Close releases the resources and close iterator
 	Close() error
 }
