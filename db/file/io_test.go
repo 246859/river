@@ -1,4 +1,4 @@
-package fio
+package file
 
 import (
 	"github.com/stretchr/testify/assert"
@@ -46,13 +46,13 @@ func testIO_Read(t *testing.T, io IO) {
 	bytes := []byte("hello world!")
 
 	buf1 := make([]byte, len(bytes))
-	n1, err1 := io.Read(buf1, int64(len(bytes)))
+	n1, err1 := io.ReadAt(buf1, int64(len(bytes)))
 	assert.True(t, n1 > 0)
 	assert.Nil(t, err1)
 	assert.Equal(t, bytes, buf1)
 
 	buf2 := make([]byte, 0)
-	n2, err2 := io.Read(buf2, 0)
+	n2, err2 := io.ReadAt(buf2, 0)
 	assert.True(t, n2 == 0)
 	assert.Nil(t, err2)
 	assert.Equal(t, []byte{}, buf2)

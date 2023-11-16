@@ -1,7 +1,6 @@
-package fio
+package file
 
 import (
-	"github.com/246859/river/pkg/file"
 	"os"
 )
 
@@ -9,7 +8,7 @@ var _ IO = StdFile{}
 
 func OpenStdFile(filename string) (*StdFile, error) {
 	fio := &StdFile{}
-	fd, err := file.Open(filename, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
+	fd, err := Open(filename, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
 	if err != nil {
 		return fio, err
 	}
@@ -21,7 +20,11 @@ type StdFile struct {
 	fd *os.File
 }
 
-func (f StdFile) Read(p []byte, off int64) (n int, err error) {
+func (f StdFile) Name() string {
+	return f.fd.Name()
+}
+
+func (f StdFile) ReadAt(p []byte, off int64) (n int, err error) {
 	return f.fd.ReadAt(p, off)
 }
 
