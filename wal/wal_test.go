@@ -1,7 +1,7 @@
 package wal
 
 import (
-	"github.com/246859/river/db/file"
+	"github.com/246859/river/file"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"io"

@@ -2,7 +2,7 @@ package wal
 
 import (
 	"encoding/binary"
-	"github.com/246859/river/db/file"
+	"github.com/246859/river/file"
 	"github.com/246859/river/pkg/crc"
 	"github.com/pkg/errors"
 	"github.com/valyala/bytebufferpool"
@@ -97,7 +97,7 @@ func newChunkHeader() any {
 
 // open a new log file
 func openLogFile(dir, ext string, fid uint32, cache *lruCache, bufferPool *bytebufferpool.Pool) (*LogFile, error) {
-	fd, err := file.Open(WalFileName(dir, fid, ext), os.O_CREATE|os.O_APPEND|os.O_RDWR, 0644)
+	fd, err := file.OpenStdFile(WalFileName(dir, fid, ext), os.O_CREATE|os.O_APPEND|os.O_RDWR, 0644)
 	if err != nil {
 		return nil, err
 	}

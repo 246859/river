@@ -2,22 +2,26 @@ package index
 
 import (
 	"bytes"
-	"github.com/246859/river/db/entry"
+	"github.com/246859/river/entry"
 )
 
 type Key = []byte
 
-// RangeOption range [min, max] keys option
+// RangeOption iterate over all keys in [min, max] with give order
+// if min and max are nil, it will return all the keys in index,
+// if min is nil and max is not nil, it will return the keys less or equal than max,
+// if max is nil and min is not nil, it will return the keys greater or equal than min,
+// both of them are not nil, it will return the keys in range [min, max],
+// then filter the keys with the give pattern if it is not empty.
+// finally return these keys with the given order.
 type RangeOption struct {
 	// min key
 	Min Key
 	// max key
-	max Key
-
+	Max Key
 	// pattern matching
-	pattern Key
-
-	// return order of elements
+	Pattern Key
+	// return order of elements, default is ascending
 	Descend bool
 }
 
@@ -56,7 +60,7 @@ type Index interface {
 type Iterator interface {
 	// Rewind set cursor to the head of hints snapshots
 	Rewind()
-	// Next returns the Hint on the cursor, return false if it has no next hint
+	// Next returns the Hint on the cursor, return true if it is out of range
 	Next() (Hint, bool)
 	// Close releases the resources and close iterator
 	Close() error

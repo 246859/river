@@ -2,7 +2,7 @@ package index
 
 import (
 	"fmt"
-	"github.com/246859/river/db/entry"
+	"github.com/246859/river/entry"
 	"github.com/246859/river/pkg/str"
 	"github.com/google/btree"
 	"regexp"
@@ -84,8 +84,8 @@ func newBTreeIterator(btr *BTree, opt RangeOption) (Iterator, error) {
 
 	var (
 		minHint  = Hint{Key: opt.Min}
-		maxHint  = Hint{Key: opt.max}
-		pattern  = str.BytesToString(opt.pattern)
+		maxHint  = Hint{Key: opt.Max}
+		pattern  = str.BytesToString(opt.Pattern)
 		iterator Iterator
 	)
 
@@ -125,7 +125,7 @@ func newBTreeIterator(btr *BTree, opt RangeOption) (Iterator, error) {
 		// greater than min
 	} else if maxHint.Key == nil {
 		btr.tree.AscendGreaterOrEqual(minHint, searchFn)
-		// range
+		// range keys
 	} else {
 		maxHint.Key = append(maxHint.Key, 0)
 		btr.tree.AscendRange(minHint, maxHint, searchFn)
@@ -137,7 +137,7 @@ func newBTreeIterator(btr *BTree, opt RangeOption) (Iterator, error) {
 
 	iterator = &BTreeIterator{
 		hints:  hints,
-		cursor: -1,
+		cursor: 0,
 	}
 
 	return iterator, nil
@@ -150,20 +150,20 @@ type BTreeIterator struct {
 
 func (bi *BTreeIterator) Next() (Hint, bool) {
 	var (
-		hint    Hint
-		hasNext bool
+		hint Hint
+		out  bool
 	)
 
-	bi.cursor++
 	if bi.cursor < len(bi.hints) {
 		hint = bi.hints[bi.cursor]
+		bi.cursor++
 	}
 
-	if bi.cursor < len(bi.hints)-1 {
-		hasNext = true
+	if bi.cursor >= len(bi.hints) {
+		out = true
 	}
 
-	return hint, hasNext
+	return hint, out
 }
 
 func (bi *BTreeIterator) Rewind() {

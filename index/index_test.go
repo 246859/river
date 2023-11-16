@@ -2,7 +2,7 @@ package index
 
 import (
 	"bytes"
-	"github.com/246859/river/db/entry"
+	entry2 "github.com/246859/river/entry"
 	"github.com/stretchr/testify/assert"
 	"sort"
 	"testing"
@@ -24,9 +24,9 @@ func TestIndexer(t *testing.T) {
 }
 
 func testIndexer_Get(t *testing.T, indexer Index) {
-	bar := Hint{Key: []byte("bar"), Hint: entry.Hint{Fid: 1, Offset: 2}}
-	foo := Hint{Key: []byte("foo"), Hint: entry.Hint{Fid: 4, Offset: 5}}
-	bob := Hint{Key: []byte("bob"), Hint: entry.Hint{Fid: 7, Offset: 8}}
+	bar := Hint{Key: []byte("bar"), Hint: entry2.Hint{Fid: 1, Offset: 2}}
+	foo := Hint{Key: []byte("foo"), Hint: entry2.Hint{Fid: 4, Offset: 5}}
+	bob := Hint{Key: []byte("bob"), Hint: entry2.Hint{Fid: 7, Offset: 8}}
 	nilE := Hint{Key: nil}
 
 	indexer.Put(bar)
@@ -50,8 +50,8 @@ func testIndexer_Get(t *testing.T, indexer Index) {
 }
 
 func testIndexer_Put(t *testing.T, indexer Index) {
-	bar := Hint{Key: []byte("bar"), Hint: entry.Hint{Fid: 1, Offset: 2}}
-	foo := Hint{Key: []byte("foo"), Hint: entry.Hint{Fid: 4, Offset: 5}}
+	bar := Hint{Key: []byte("bar"), Hint: entry2.Hint{Fid: 1, Offset: 2}}
+	foo := Hint{Key: []byte("foo"), Hint: entry2.Hint{Fid: 4, Offset: 5}}
 	nilE := Hint{Key: nil}
 
 	err := indexer.Put(bar)
@@ -64,13 +64,13 @@ func testIndexer_Put(t *testing.T, indexer Index) {
 	assert.Nil(t, err)
 
 	err = indexer.Put(nilE)
-	assert.ErrorIs(t, err, entry.ErrNilKey)
+	assert.ErrorIs(t, err, entry2.ErrNilKey)
 }
 
 func testIndexer_Del(t *testing.T, indexer Index) {
-	bar := Hint{Key: []byte("bar"), Hint: entry.Hint{Fid: 1, Offset: 2}}
-	foo := Hint{Key: []byte("foo"), Hint: entry.Hint{Fid: 4, Offset: 5}}
-	bob := Hint{Key: []byte("bob"), Hint: entry.Hint{Fid: 7, Offset: 8}}
+	bar := Hint{Key: []byte("bar"), Hint: entry2.Hint{Fid: 1, Offset: 2}}
+	foo := Hint{Key: []byte("foo"), Hint: entry2.Hint{Fid: 4, Offset: 5}}
+	bob := Hint{Key: []byte("bob"), Hint: entry2.Hint{Fid: 7, Offset: 8}}
 
 	err := indexer.Put(bar)
 	assert.Nil(t, err)
@@ -92,10 +92,10 @@ func testIndexer_Del(t *testing.T, indexer Index) {
 
 func testIndexer_Iterator(t *testing.T, indexer Index) {
 	hints := []Hint{
-		{Key: []byte("bob"), Hint: entry.Hint{Fid: 1, Offset: 2}},
-		{Key: []byte("jack"), Hint: entry.Hint{Fid: 4, Offset: 5}},
-		{Key: []byte("aaa"), Hint: entry.Hint{Fid: 7, Offset: 8}},
-		{Key: []byte("adas"), Hint: entry.Hint{Fid: 10, Offset: 11}},
+		{Key: []byte("bob"), Hint: entry2.Hint{Fid: 1, Offset: 2}},
+		{Key: []byte("jack"), Hint: entry2.Hint{Fid: 4, Offset: 5}},
+		{Key: []byte("aaa"), Hint: entry2.Hint{Fid: 7, Offset: 8}},
+		{Key: []byte("adas"), Hint: entry2.Hint{Fid: 10, Offset: 11}},
 	}
 
 	for _, h := range hints {
@@ -113,8 +113,8 @@ func testIndexer_Iterator(t *testing.T, indexer Index) {
 
 	var i int
 	for {
-		next, hasNext := iterator.Next()
-		if !hasNext {
+		next, out := iterator.Next()
+		if !out {
 			break
 		}
 		assert.EqualValues(t, hints[i], next)
