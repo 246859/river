@@ -1,7 +1,7 @@
 package assets
 
 import (
-	"github.com/246859/river/pkg/file"
+	"github.com/246859/river/db/file"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
