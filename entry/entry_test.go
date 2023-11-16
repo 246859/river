@@ -114,3 +114,44 @@ func TestHint_Marshal_UnMarshal(t *testing.T) {
 		}
 	}
 }
+
+func TestValidate(t *testing.T) {
+	// redundant type
+	{
+		entry := Entry{
+			Type:  DeletedEntryType,
+			Key:   []byte("key"),
+			Value: []byte("value"),
+			TTL:   time.Now().Add(time.Hour).UnixMilli(),
+			Batch: 0,
+		}
+		err := Validate(entry)
+		assert.NotNil(t, err)
+	}
+
+	// nil key
+	{
+		entry := Entry{
+			Type:  DataEntryType,
+			Key:   nil,
+			Value: []byte("value"),
+			TTL:   time.Now().Add(time.Hour).UnixMilli(),
+			Batch: 0,
+		}
+		err := Validate(entry)
+		assert.NotNil(t, err)
+	}
+
+	// expired
+	{
+		entry := Entry{
+			Type:  DataEntryType,
+			Key:   []byte("key"),
+			Value: []byte("value"),
+			TTL:   0,
+			Batch: 0,
+		}
+		err := Validate(entry)
+		assert.NotNil(t, err)
+	}
+}
