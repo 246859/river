@@ -1,28 +1,27 @@
-package data
+package entry
 
 import (
-	"encoding/binary"
-	"github.com/246859/river/pkg/crc"
 	"github.com/pkg/errors"
 )
 
 var (
 	ErrNilKey           = errors.New("key is nil")
-	ErrCrcCheckFailed   = errors.New("crc check failed")
 	ErrNilRawData       = errors.New("raw data bytes is nil")
 	ErrInvalidEntryType = errors.New("entry type is invalid")
 )
 
-type EntryType = byte
+type EType = byte
 
 const (
-	EntryDataType EntryType = 1 + iota
+	DataEntryType EType = 1 + iota
 
-	DeleteEntryType
+	DeletedEntryType
+
+	BatchFinishedEntryType
 )
 
-func CheckEntryType(t EntryType) error {
-	if t < 1 || t > 2 {
+func CheckEntryType(t EType) error {
+	if t < DataEntryType || t > BatchFinishedEntryType {
 		return errors.Wrapf(ErrInvalidEntryType, "%d", t)
 	}
 	return nil
@@ -30,11 +29,12 @@ func CheckEntryType(t EntryType) error {
 
 // Entry represents a data entry in data file
 type Entry struct {
+	Type  EType
 	Key   []byte
 	Value []byte
-	Type  EntryType
 
-	Timestamp int64
+	TTL   int64
+	Batch int64
 }
 
 type Marshaler interface {
@@ -46,7 +46,6 @@ type UnMarshaler interface {
 }
 
 type defaultEntryMarshaler struct {
-	crc crc.Crc32
 }
 
 func (d defaultEntryMarshaler) MarshalEntry(entry Entry) ([]byte, error) {
@@ -55,10 +54,12 @@ func (d defaultEntryMarshaler) MarshalEntry(entry Entry) ([]byte, error) {
 		return []byte{}, ErrNilKey
 	}
 
-	headerBytes, offset, err := d.MarshalHeader(EntryHeader{
-		Et:  entry.Type,
-		Ksz: uint32(len(entry.Key)),
-		Vsz: uint32(len(entry.Value)),
+	headerBytes, offset, err := d.MarshalHeader(Header{
+		Type:  entry.Type,
+		Ksz:   uint32(len(entry.Key)),
+		Vsz:   uint32(len(entry.Value)),
+		TTL:   entry.TTL,
+		Batch: entry.Batch,
 	})
 
 	if err != nil {
@@ -83,10 +84,6 @@ func (d defaultEntryMarshaler) MarshalEntry(entry Entry) ([]byte, error) {
 	copy(entryBytes[offset:], entry.Key)
 	copy(entryBytes[offset+ksz:], entry.Value)
 
-	// compute crc check sum
-	crcSum := d.crc.Sum(entryBytes[4:])
-	binary.LittleEndian.PutUint32(entryBytes[:4], crcSum)
-
 	return entryBytes, nil
 }
 
@@ -97,8 +94,8 @@ func (d defaultEntryMarshaler) UnMarshalEntry(bytes []byte) (Entry, error) {
 		return entry, err
 	}
 
-	entry.Type = header.Et
-	entry.Timestamp = header.tstmap
+	entry.Type = header.Type
+	entry.TTL = header.TTL
 	entry.Key = make([]byte, header.Ksz)
 	entry.Value = make([]byte, header.Vsz)
 
@@ -108,7 +105,7 @@ func (d defaultEntryMarshaler) UnMarshalEntry(bytes []byte) (Entry, error) {
 	return entry, nil
 }
 
-var defaultMarshaler = defaultEntryMarshaler{crc: crc.IEEE32}
+var defaultMarshaler = defaultEntryMarshaler{}
 
 func MarshalEntry(entry Entry) ([]byte, error) {
 	return defaultMarshaler.MarshalEntry(entry)
@@ -118,18 +115,18 @@ func UnMarshalEntry(rawdata []byte) (Entry, error) {
 	return defaultMarshaler.UnMarshalEntry(rawdata)
 }
 
-func MarshalHeader(header EntryHeader) ([]byte, int, error) {
+func MarshalHeader(header Header) ([]byte, int, error) {
 	return defaultMarshaler.MarshalHeader(header)
 }
 
-func UnMarshalHeader(rawdata []byte) (EntryHeader, int, error) {
+func UnMarshalHeader(rawdata []byte) (Header, int, error) {
 	return defaultMarshaler.UnMarshalHeader(rawdata)
 }
 
-func MarshalHint(hint EntryHint) ([]byte, error) {
+func MarshalHint(hint Hint) ([]byte, error) {
 	return defaultMarshaler.MarshalHint(hint)
 }
 
-func UnMarshalHint(rawdata []byte) (EntryHint, error) {
+func UnMarshalHint(rawdata []byte) (Hint, error) {
 	return defaultMarshaler.UnMarshalHint(rawdata)
 }
