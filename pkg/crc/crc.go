@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	ErrCrcInvalid = errors.New("invalid crc")
+	ErrCrcCheckFailed = errors.New("crc check failed")
 )
 
 var (
