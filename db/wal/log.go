@@ -2,8 +2,8 @@ package wal
 
 import (
 	"encoding/binary"
+	"github.com/246859/river/db/file"
 	"github.com/246859/river/pkg/crc"
-	"github.com/246859/river/pkg/file"
 	"github.com/pkg/errors"
 	"github.com/valyala/bytebufferpool"
 	"io"
@@ -122,7 +122,7 @@ func openLogFile(dir, ext string, fid uint32, cache *lruCache, bufferPool *byteb
 
 type LogFile struct {
 	fid uint32
-	fd  *os.File
+	fd  file.IO
 
 	crc crc.Crc32
 
@@ -224,7 +224,7 @@ func (log *LogFile) read(block uint32, chunkOffset int64) ([]byte, ChunkPos, err
 		// check crc
 		check := log.crc.Sum(tmpBlock[chunkOffset+4 : payloadTail])
 		if check != headerCrc {
-			return dataBytes, nextChunkPos, crc.ErrCrcInvalid
+			return dataBytes, nextChunkPos, crc.ErrCrcCheckFailed
 		}
 
 		// chunk read finished

@@ -2,7 +2,7 @@ package wal
 
 import (
 	"fmt"
-	"github.com/246859/river/pkg/file"
+	"github.com/246859/river/db/file"
 	"github.com/google/btree"
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/pkg/errors"
