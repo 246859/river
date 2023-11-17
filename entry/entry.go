@@ -1,7 +1,6 @@
 package entry
 
 import (
-	"encoding/binary"
 	"github.com/pkg/errors"
 	"time"
 )
@@ -41,15 +40,6 @@ type Entry struct {
 	Batch int64
 }
 
-// MaxHeaderSize
-// |                     31 B                   |
-// +------+------+----------+--------+----------+---------+---------+
-// | type | ttl  | batch    | key_sz | value_sz | key     | value   |
-// +------+------+----------+--------+----------+---------+---------+
-// | 1 B  | 10 B | 10 B     | 5 B    | 5 B      | unfixed | unfixed |
-// +------+------+----------+--------+----------+---------+---------+
-const MaxHeaderSize = 1 + binary.MaxVarintLen64*2 + binary.MaxVarintLen32*2
-
 // Header represents a header of data entry
 type Header struct {
 	Type  EType
@@ -58,13 +48,6 @@ type Header struct {
 	Ksz   uint32
 	Vsz   uint32
 }
-
-// +-----+-------+--------+------+
-// | fid | block | offset | ttl  |
-// +-----+-------+--------+------+
-// | 5 B | 5 B   | 10 B   | 10 B |
-// +-----+-------+--------+------+
-const maxHintSize = binary.MaxVarintLen32*2 + binary.MaxVarintLen64*2
 
 // Hint represents the position of record in which file specified by fid
 type Hint struct {

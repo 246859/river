@@ -5,6 +5,23 @@ import "encoding/binary"
 // BinaryEntry Binary data format
 type BinaryEntry struct{}
 
+// MaxHintSize
+// +-----+-------+--------+------+
+// | fid | block | offset | ttl  |
+// +-----+-------+--------+------+
+// | 5 B | 5 B   | 10 B   | 10 B |
+// +-----+-------+--------+------+
+const MaxHintSize = binary.MaxVarintLen32*2 + binary.MaxVarintLen64*2
+
+// MaxHeaderSize
+// |                     31 B                   |
+// +------+------+----------+--------+----------+---------+---------+
+// | type | ttl  | batch    | key_sz | value_sz | key     | value   |
+// +------+------+----------+--------+----------+---------+---------+
+// | 1 B  | 10 B | 10 B     | 5 B    | 5 B      | unfixed | unfixed |
+// +------+------+----------+--------+----------+---------+---------+
+const MaxHeaderSize = 1 + binary.MaxVarintLen64*2 + binary.MaxVarintLen32*2
+
 func (d BinaryEntry) MarshalEntry(entry Entry) ([]byte, error) {
 	// check key length
 	if entry.Key == nil {
@@ -133,7 +150,7 @@ func (d BinaryEntry) UnMarshalHeader(raws []byte) (Header, int, error) {
 
 func (d BinaryEntry) MarshalHint(hint Hint) ([]byte, error) {
 	var (
-		hintBytes = make([]byte, maxHintSize)
+		hintBytes = make([]byte, MaxHintSize)
 		offset    = 0
 	)
 
