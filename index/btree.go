@@ -5,6 +5,7 @@ import (
 	"github.com/246859/river/entry"
 	"github.com/246859/river/pkg/str"
 	"github.com/google/btree"
+	"math"
 	"regexp"
 	"slices"
 	"sync"
@@ -15,10 +16,11 @@ var (
 	_ Iterator = &BTreeIterator{}
 )
 
-func BtreeIndex(degree int) *BTree {
+func BtreeIndex(degree int, less LessKey) *BTree {
 	bi := new(BTree)
+	bi.less = less
 	bi.tree = btree.NewG[Hint](degree, func(a, b Hint) bool {
-		return a.Compare(b) < 0
+		return less(a.Key, b.Key)
 	})
 	return bi
 }
@@ -28,6 +30,8 @@ func BtreeIndex(degree int) *BTree {
 type BTree struct {
 	tree  *btree.BTreeG[Hint]
 	mutex sync.RWMutex
+
+	less LessKey
 }
 
 func (b *BTree) Iterator(opt RangeOption) (Iterator, error) {
@@ -83,14 +87,15 @@ func (b *BTree) Close() error {
 func newBTreeIterator(btr *BTree, opt RangeOption) (Iterator, error) {
 
 	var (
-		minHint  = Hint{Key: opt.Min}
-		maxHint  = Hint{Key: opt.Max}
+		minHint = Hint{Key: opt.Min}
+		maxHint = Hint{Key: opt.Max}
+		// temporary string, never to modify it
 		pattern  = str.BytesToString(opt.Pattern)
 		iterator Iterator
 	)
 
-	if minHint.Key != nil && maxHint.Key != nil && minHint.Compare(maxHint) > 0 {
-		return iterator, fmt.Errorf("max must be greater equal than min")
+	if minHint.Key != nil && maxHint.Key != nil && !btr.less(minHint.Key, maxHint.Key) {
+		return iterator, fmt.Errorf("max key must be greater than min key")
 	}
 
 	var reg *regexp.Regexp
@@ -118,16 +123,16 @@ func newBTreeIterator(btr *BTree, opt RangeOption) (Iterator, error) {
 	// all keys
 	if minHint.Key == nil && maxHint.Key == nil {
 		btr.tree.Ascend(searchFn)
-		// less than max
+		// less than or equal max
 	} else if minHint.Key == nil {
-		maxHint.Key = append(maxHint.Key, 0)
+		maxHint.Key = append(maxHint.Key, math.MaxUint8)
 		btr.tree.AscendLessThan(maxHint, searchFn)
-		// greater than min
+		// greater than or equal min
 	} else if maxHint.Key == nil {
 		btr.tree.AscendGreaterOrEqual(minHint, searchFn)
-		// range keys
+		// range keys in [min, max]
 	} else {
-		maxHint.Key = append(maxHint.Key, 0)
+		maxHint.Key = append(maxHint.Key, math.MaxUint8)
 		btr.tree.AscendRange(minHint, maxHint, searchFn)
 	}
 

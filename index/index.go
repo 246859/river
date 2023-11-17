@@ -31,10 +31,11 @@ type Hint struct {
 	Hint entry.Hint
 }
 
-// Compare
-// -1-less, 0-equal, 1-larger
-func (i Hint) Compare(idx Hint) int {
-	return bytes.Compare(i.Key, idx.Key)
+// LessKey returns a function that decide how to sort keys in memory index
+type LessKey func(a, b Key) bool
+
+func DefaultLessKey(a, b Key) bool {
+	return bytes.Compare(a, b) < 0
 }
 
 // Index storage a set of index hints and define index operation apis that implemented by concrete data struct.
