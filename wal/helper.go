@@ -22,6 +22,6 @@ func WalFileName(dir string, fid uint32, ext string) string {
 // but no left space to hold the second chunk header, in that case, the block need padding to fill the left space.
 // padding + block * header + data size
 func estimateBlockSize(dataSize int64) int64 {
-	block := dataSize/maxBlockSize + 1
-	return block*chunkHeaderSize + dataSize + chunkHeaderSize
+	block := dataSize/MaxBlockSize + 1
+	return block*ChunkHeaderSize + dataSize + ChunkHeaderSize
 }

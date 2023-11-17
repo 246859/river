@@ -26,14 +26,15 @@ const (
 	ChunkLastType
 )
 
+// ChunkHeaderSize
 // +-----------+--------------+------------+------------+
 // | check sum | chunk length | chunk type | chunk data |
 // +-----------+--------------+------------+------------+
 // | 4 Bytes   | 2 Bytes      | 1 Bytes    | <= 32KB-7B |
 // +-----------+--------------+------------+------------+
-const chunkHeaderSize = 7
+const ChunkHeaderSize = 7
 
-const maxBlockSize = 32 * file.KB
+const MaxBlockSize = 32 * file.KB
 
 type ChunkHeader struct {
 	crc       uint32
@@ -88,11 +89,11 @@ type ChunkIterator interface {
 }
 
 func newBlock() any {
-	return make([]byte, maxBlockSize)
+	return make([]byte, MaxBlockSize)
 }
 
 func newChunkHeader() any {
-	return make([]byte, chunkHeaderSize)
+	return make([]byte, ChunkHeaderSize)
 }
 
 // open a new log file
@@ -110,8 +111,8 @@ func openLogFile(dir, ext string, fid uint32, cache *lruCache, bufferPool *byteb
 	return &LogFile{
 		fid:         fid,
 		fd:          fd,
-		block:       uint32(offset / maxBlockSize),
-		blockOffset: offset % maxBlockSize,
+		block:       uint32(offset / MaxBlockSize),
+		blockOffset: offset % MaxBlockSize,
 		crc:         crc.Koopman32,
 		blockPool:   sync.Pool{New: newBlock},
 		headerPool:  sync.Pool{New: newChunkHeader},
@@ -172,14 +173,14 @@ func (log *LogFile) read(block uint32, chunkOffset int64) ([]byte, ChunkPos, err
 	// read a block size by per-circulate
 	for {
 
-		readSize := int64(maxBlockSize)
-		blockOffset := int64(block * maxBlockSize)
+		readSize := int64(MaxBlockSize)
+		blockOffset := int64(block * MaxBlockSize)
 
 		if blockOffset+readSize > fileSize {
 			readSize = fileSize - blockOffset
 		}
 
-		if chunkOffset >= readSize || readSize < chunkHeaderSize {
+		if chunkOffset >= readSize || readSize < ChunkHeaderSize {
 			return dataBytes, nextChunkPos, io.EOF
 		}
 
@@ -203,19 +204,19 @@ func (log *LogFile) read(block uint32, chunkOffset int64) ([]byte, ChunkPos, err
 			}
 
 			// cached the block
-			if log.blockCache != nil && readSize == maxBlockSize {
-				cachedBlock = make([]byte, maxBlockSize)
+			if log.blockCache != nil && readSize == MaxBlockSize {
+				cachedBlock = make([]byte, MaxBlockSize)
 				copy(cachedBlock, tmpBlock)
 				log.blockCache.Add(cacheKey, cachedBlock)
 			}
 		}
 
 		// read header info
-		copy(tmpHeader, tmpBlock[chunkOffset:chunkOffset+chunkHeaderSize])
+		copy(tmpHeader, tmpBlock[chunkOffset:chunkOffset+ChunkHeaderSize])
 		headerCrc := binary.LittleEndian.Uint32(tmpHeader[:4])
 		payloadLen := binary.LittleEndian.Uint16(tmpHeader[4:6])
 		chunkType := tmpHeader[6]
-		payloadOffset := chunkOffset + chunkHeaderSize
+		payloadOffset := chunkOffset + ChunkHeaderSize
 		payloadTail := payloadOffset + int64(payloadLen)
 
 		// read chunk payload and write to data bytes
@@ -234,7 +235,7 @@ func (log *LogFile) read(block uint32, chunkOffset int64) ([]byte, ChunkPos, err
 
 			// if current chunk is the last chunk of block that no left space to hold another one
 			// then turn to the next block
-			if payloadTail+chunkHeaderSize > maxBlockSize {
+			if payloadTail+ChunkHeaderSize > MaxBlockSize {
 				nextChunkPos.Block++
 				nextChunkPos.Offset = 0
 			}
@@ -321,10 +322,10 @@ func (log *LogFile) writeToBuffer(data []byte, buffer *bytebufferpool.ByteBuffer
 	oldBufferOffset := buffer.Len()
 	padding := int64(0)
 
-	// if current block has no space left to accommodate more than bytes size of chunkHeaderSize
+	// if current block has no space left to accommodate more than bytes size of ChunkHeaderSize
 	// then turn to a new chunk, and fill the rest bytes of the old chunk
-	if log.blockOffset < maxBlockSize && log.blockOffset+chunkHeaderSize >= maxBlockSize {
-		padding += maxBlockSize - log.blockOffset
+	if log.blockOffset < MaxBlockSize && log.blockOffset+ChunkHeaderSize >= MaxBlockSize {
+		padding += MaxBlockSize - log.blockOffset
 		p := make([]byte, padding)
 		buffer.Write(p)
 
@@ -340,11 +341,11 @@ func (log *LogFile) writeToBuffer(data []byte, buffer *bytebufferpool.ByteBuffer
 	}
 
 	dataSize := int64(len(data))
-	chunkSize := chunkHeaderSize + dataSize
+	chunkSize := ChunkHeaderSize + dataSize
 
 	// if current block can hold entire chunk which situation is ChunkFull
 	// else data should be stored in multiple blocks
-	if log.blockOffset+chunkSize <= maxBlockSize {
+	if log.blockOffset+chunkSize <= MaxBlockSize {
 		log.appendChunkToBuffer(buffer, data, ChunkFullType)
 		preparedPos.Size += chunkSize
 	} else {
@@ -361,7 +362,7 @@ func (log *LogFile) writeToBuffer(data []byte, buffer *bytebufferpool.ByteBuffer
 		for leftDataSize > 0 {
 			var (
 				// left space of current block can hold payload
-				leftBlockSz = maxBlockSize - curBlockSz - chunkHeaderSize
+				leftBlockSz = MaxBlockSize - curBlockSz - ChunkHeaderSize
 				// how many bytes already written to buffer
 				bufferOffset = dataSize - leftDataSize
 			)
@@ -394,9 +395,9 @@ func (log *LogFile) writeToBuffer(data []byte, buffer *bytebufferpool.ByteBuffer
 			// update range info
 			leftDataSize -= nextChunkSize
 			chunkCount += 1
-			curBlockSz = (curBlockSz + chunkHeaderSize + nextChunkSize) % maxBlockSize
+			curBlockSz = (curBlockSz + ChunkHeaderSize + nextChunkSize) % MaxBlockSize
 		}
-		preparedPos.Size = chunkCount*chunkHeaderSize + dataSize
+		preparedPos.Size = chunkCount*ChunkHeaderSize + dataSize
 	}
 
 	// check if chunk size is valid
@@ -408,9 +409,9 @@ func (log *LogFile) writeToBuffer(data []byte, buffer *bytebufferpool.ByteBuffer
 
 	// update logfile status
 	log.blockOffset += preparedPos.Size
-	if log.blockOffset >= maxBlockSize {
-		log.block += uint32(log.blockOffset / maxBlockSize)
-		log.blockOffset %= maxBlockSize
+	if log.blockOffset >= MaxBlockSize {
+		log.block += uint32(log.blockOffset / MaxBlockSize)
+		log.blockOffset %= MaxBlockSize
 	}
 
 	return preparedPos, nil
@@ -438,9 +439,9 @@ func (log *LogFile) appendChunkToBuffer(buffer *bytebufferpool.ByteBuffer, data 
 }
 
 func (log *LogFile) writeToFile(buffer *bytebufferpool.ByteBuffer) error {
-	if log.blockOffset > maxBlockSize {
+	if log.blockOffset > MaxBlockSize {
 		return errors.WithMessagef(ErrBlockExceeded, "%d log file %d block szize exceeded: %d, max: %d",
-			log.fid, log.block, log.blockOffset, maxBlockSize)
+			log.fid, log.block, log.blockOffset, MaxBlockSize)
 	}
 	_, err := log.fd.Write(buffer.Bytes())
 	if err != nil {
@@ -465,7 +466,7 @@ func (log *LogFile) Remove() error {
 }
 
 func (log *LogFile) Size() int64 {
-	return int64(log.block*maxBlockSize) + log.blockOffset
+	return int64(log.block*MaxBlockSize) + log.blockOffset
 }
 
 func (log *LogFile) Sync() error {
@@ -522,8 +523,8 @@ func (l *LogFileChunkIterator) Next() ([]byte, ChunkPos, error) {
 	}
 
 	// compute the chunk size
-	chunkAt := int64(nextChunkPos.Block)*maxBlockSize + nextChunkPos.Offset
-	nextChunkAt := int64(chunkPos.Block)*maxBlockSize + chunkPos.Offset
+	chunkAt := int64(nextChunkPos.Block)*MaxBlockSize + nextChunkPos.Offset
+	nextChunkAt := int64(chunkPos.Block)*MaxBlockSize + chunkPos.Offset
 	chunkPos.Size = nextChunkAt - chunkAt
 
 	// update chunk index

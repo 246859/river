@@ -43,7 +43,7 @@ func reviseOpt(opt Option) (Option, error) {
 		opt.Ext = DefaultWalSuffix
 	}
 
-	if opt.MaxFileSize < int64(opt.BlockCache*maxBlockSize) {
+	if opt.MaxFileSize < int64(opt.BlockCache*MaxBlockSize) {
 		return opt, fmt.Errorf("max file size must be greater than block cache")
 	}
 
@@ -57,7 +57,7 @@ func defaultOption() Option {
 		Ext:            DefaultWalSuffix,
 		BlockCache:     20,
 		FsyncPerWrite:  true,
-		FsyncThreshold: maxBlockSize * 20,
+		FsyncThreshold: MaxBlockSize * 20,
 	}
 }
 

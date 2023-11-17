@@ -52,7 +52,7 @@ func TestLogFile_Write_Full(t *testing.T) {
 			assert.Equal(t, file.fid, pos.Fid)
 			assert.True(t, pos.Block == 0)
 			assert.True(t, pos.Offset == 0)
-			assert.True(t, pos.Size == int64(len(data)+chunkHeaderSize))
+			assert.True(t, pos.Size == int64(len(data)+ChunkHeaderSize))
 		}
 
 		// #2
@@ -63,7 +63,7 @@ func TestLogFile_Write_Full(t *testing.T) {
 			assert.Equal(t, file.fid, pos.Fid)
 			assert.True(t, pos.Block == 0)
 			assert.True(t, pos.Offset > 0)
-			assert.True(t, pos.Size == int64(len(data)+chunkHeaderSize))
+			assert.True(t, pos.Size == int64(len(data)+ChunkHeaderSize))
 		}
 	}
 }
@@ -74,19 +74,19 @@ func TestLogFile_Write_FullBlock(t *testing.T) {
 	defer func() {
 		assert.Nil(t, file.Remove())
 	}()
-	data := []byte(strings.Repeat("a", maxBlockSize-chunkHeaderSize))
+	data := []byte(strings.Repeat("a", MaxBlockSize-ChunkHeaderSize))
 	pos, err := file.Write(data)
 	assert.Nil(t, err)
 	assert.EqualValues(t, 0, pos.Block)
 	assert.EqualValues(t, 0, pos.Offset)
-	assert.EqualValues(t, maxBlockSize, pos.Size)
+	assert.EqualValues(t, MaxBlockSize, pos.Size)
 
 	data2 := []byte(strings.Repeat("a", 10))
 	pos2, err := file.Write(data2)
 	assert.Nil(t, err)
 	assert.EqualValues(t, 1, pos2.Block)
 	assert.EqualValues(t, 0, pos2.Offset)
-	assert.EqualValues(t, len(data2)+chunkHeaderSize, pos2.Size)
+	assert.EqualValues(t, len(data2)+ChunkHeaderSize, pos2.Size)
 }
 
 func TestLogFile_Write_Padding(t *testing.T) {
@@ -95,11 +95,11 @@ func TestLogFile_Write_Padding(t *testing.T) {
 		assert.Nil(t, file.Remove())
 	}()
 	// left block space = 6 bytes, could not hold a chunkheader which is 7 bytes
-	data := []byte(strings.Repeat("a", maxBlockSize-chunkHeaderSize-6))
+	data := []byte(strings.Repeat("a", MaxBlockSize-ChunkHeaderSize-6))
 	pos, err := file.Write(data)
 	assert.Nil(t, err)
 	assert.EqualValues(t, 0, pos.Block)
-	assert.EqualValues(t, maxBlockSize-6, pos.Size)
+	assert.EqualValues(t, MaxBlockSize-6, pos.Size)
 
 	data1 := []byte(strings.Repeat("b", 12))
 	pos1, err := file.Write(data1)
@@ -114,13 +114,13 @@ func TestLogFile_Write_First_Middle_Last(t *testing.T) {
 	}()
 
 	// fist-last
-	data := []byte(strings.Repeat("a", maxBlockSize+chunkHeaderSize))
+	data := []byte(strings.Repeat("a", MaxBlockSize+ChunkHeaderSize))
 	pos, err := file.Write(data)
 	assert.Nil(t, err)
 	assert.EqualValues(t, 0, pos.Block)
 
 	// fist-middle-last
-	data1 := []byte(strings.Repeat("a", maxBlockSize*4))
+	data1 := []byte(strings.Repeat("a", MaxBlockSize*4))
 	pos1, err := file.Write(data1)
 	assert.Nil(t, err)
 	assert.EqualValues(t, 1, pos1.Block)
@@ -155,7 +155,7 @@ func TestLogFile_Read_Padding(t *testing.T) {
 		assert.Nil(t, file.Remove())
 	}()
 	// left block space = 6 bytes, could not hold a chunkheader which is 7 bytes
-	data := []byte(strings.Repeat("a", maxBlockSize-chunkHeaderSize-6))
+	data := []byte(strings.Repeat("a", MaxBlockSize-ChunkHeaderSize-6))
 	pos, err := file.Write(data)
 	assert.Nil(t, err)
 
@@ -182,13 +182,13 @@ func TestLogFile_WriteAll(t *testing.T) {
 		// full
 		[]byte(strings.Repeat("a", 100)),
 		// first-last
-		[]byte(strings.Repeat("a", maxBlockSize)),
+		[]byte(strings.Repeat("a", MaxBlockSize)),
 		// full
 		[]byte(strings.Repeat("a", 100)),
 		// first-middle-last
-		[]byte(strings.Repeat("a", maxBlockSize*3+200)),
+		[]byte(strings.Repeat("a", MaxBlockSize*3+200)),
 		// first-last
-		[]byte(strings.Repeat("a", maxBlockSize)),
+		[]byte(strings.Repeat("a", MaxBlockSize)),
 		// full
 		[]byte(strings.Repeat("a", 100)),
 	}
@@ -210,7 +210,7 @@ func TestLogFile_Read_First_Middle_Last(t *testing.T) {
 	}()
 
 	// fist-last
-	data := []byte(strings.Repeat("a", maxBlockSize+chunkHeaderSize))
+	data := []byte(strings.Repeat("a", MaxBlockSize+ChunkHeaderSize))
 	pos, err := file.Write(data)
 	assert.Nil(t, err)
 	assert.EqualValues(t, 0, pos.Block)
@@ -220,7 +220,7 @@ func TestLogFile_Read_First_Middle_Last(t *testing.T) {
 	assert.Equal(t, data, read)
 
 	// fist-middle-last
-	data1 := []byte(strings.Repeat("a", maxBlockSize*4))
+	data1 := []byte(strings.Repeat("a", MaxBlockSize*4))
 	pos1, err := file.Write(data1)
 	assert.Nil(t, err)
 	assert.EqualValues(t, 1, pos1.Block)
@@ -237,7 +237,7 @@ func TestLogFile_Write_Read_ManyChunks(t *testing.T) {
 	}()
 
 	// fist-last
-	data := []byte(strings.Repeat("a", maxBlockSize+100))
+	data := []byte(strings.Repeat("a", MaxBlockSize+100))
 	pos, err := file.Write(data)
 	assert.Nil(t, err)
 
@@ -247,7 +247,7 @@ func TestLogFile_Write_Read_ManyChunks(t *testing.T) {
 	assert.Nil(t, err)
 
 	// fist-mioddle-last
-	data2 := []byte(strings.Repeat("a", maxBlockSize*3+100))
+	data2 := []byte(strings.Repeat("a", MaxBlockSize*3+100))
 	pos2, err := file.Write(data2)
 	assert.Nil(t, err)
 
@@ -283,13 +283,13 @@ func TestLogFile_Iterator(t *testing.T) {
 		// full
 		[]byte(strings.Repeat("a", 100)),
 		// first-last
-		[]byte(strings.Repeat("a", maxBlockSize)),
+		[]byte(strings.Repeat("a", MaxBlockSize)),
 		// full
 		[]byte(strings.Repeat("a", 100)),
 		// first-middle-last
-		[]byte(strings.Repeat("a", maxBlockSize*3+200)),
+		[]byte(strings.Repeat("a", MaxBlockSize*3+200)),
 		// first-last
-		[]byte(strings.Repeat("a", maxBlockSize)),
+		[]byte(strings.Repeat("a", MaxBlockSize)),
 		// full
 		[]byte(strings.Repeat("a", 100)),
 	}
@@ -320,9 +320,9 @@ func TestLogFile_BigData(t *testing.T) {
 
 	samples := [][2]int{
 		{100, 1000},
-		{100, maxBlockSize},
-		{100, maxBlockSize * 32},
-		{1000, maxBlockSize * 64},
+		{100, MaxBlockSize},
+		{100, MaxBlockSize * 32},
+		{1000, MaxBlockSize * 64},
 		{10_0000, 10},
 	}
 

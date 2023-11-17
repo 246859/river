@@ -18,7 +18,7 @@ var test_option = Option{
 	Ext:            DefaultWalSuffix,
 	BlockCache:     5,
 	FsyncPerWrite:  true,
-	FsyncThreshold: maxBlockSize * 20,
+	FsyncThreshold: MaxBlockSize * 20,
 }
 
 func tempWal(opt Option) *Wal {
@@ -133,7 +133,7 @@ func TestWal_Write_ManyFiles(t *testing.T) {
 func TestWal_Write_LargeData(t *testing.T) {
 	opt := test_option
 	opt.MaxFileSize = file.GB * 2
-	opt.BlockCache = file.GB / maxBlockSize / 10
+	opt.BlockCache = file.GB / MaxBlockSize / 10
 	wal := tempWal(opt)
 	defer clean(wal)
 
