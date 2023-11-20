@@ -144,6 +144,14 @@ func UnixMill() int64 {
 	return time.Now().UnixMilli()
 }
 
+func NewTTL(ttl time.Duration) int64 {
+	return UnixMill() + ttl.Milliseconds()
+}
+
+func LeftTTl(ttl int64) time.Duration {
+	return time.Duration(ttl - UnixMill())
+}
+
 func IsExpired(ttl int64) bool {
 	return ttl <= UnixMill()
 }

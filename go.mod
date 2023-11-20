@@ -8,6 +8,7 @@ require (
 )
 
 require (
+	github.com/bwmarrin/snowflake v0.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/gofrs/flock v0.8.1 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect

@@ -16,11 +16,11 @@ var (
 	_ Iterator = &BTreeIterator{}
 )
 
-func BtreeIndex(degree int, less LessKey) *BTree {
+func BtreeIndex(degree int, compare Compare) *BTree {
 	bi := new(BTree)
-	bi.less = less
+	bi.compare = compare
 	bi.tree = btree.NewG[Hint](degree, func(a, b Hint) bool {
-		return less(a.Key, b.Key)
+		return compare(a.Key, b.Key) == Less
 	})
 	return bi
 }
@@ -31,7 +31,11 @@ type BTree struct {
 	tree  *btree.BTreeG[Hint]
 	mutex sync.RWMutex
 
-	less LessKey
+	compare Compare
+}
+
+func (b *BTree) Compare(k1, k2 Key) int {
+	return b.compare(k1, k2)
 }
 
 func (b *BTree) Iterator(opt RangeOption) (Iterator, error) {
@@ -94,7 +98,7 @@ func newBTreeIterator(btr *BTree, opt RangeOption) (Iterator, error) {
 		iterator Iterator
 	)
 
-	if minHint.Key != nil && maxHint.Key != nil && !btr.less(minHint.Key, maxHint.Key) {
+	if minHint.Key != nil && maxHint.Key != nil && btr.compare(minHint.Key, maxHint.Key) >= Equal {
 		return iterator, fmt.Errorf("max key must be greater than min key")
 	}
 
@@ -123,7 +127,7 @@ func newBTreeIterator(btr *BTree, opt RangeOption) (Iterator, error) {
 	// all keys
 	if minHint.Key == nil && maxHint.Key == nil {
 		btr.tree.Ascend(searchFn)
-		// less than or equal max
+		// compare than or equal max
 	} else if minHint.Key == nil {
 		maxHint.Key = append(maxHint.Key, math.MaxUint8)
 		btr.tree.AscendLessThan(maxHint, searchFn)

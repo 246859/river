@@ -11,7 +11,7 @@ import (
 func TestIndexer(t *testing.T) {
 	indexers := []func() Index{
 		func() Index {
-			return BtreeIndex(32, DefaultLessKey)
+			return BtreeIndex(32, DefaultCompare)
 		},
 	}
 

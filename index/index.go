@@ -3,13 +3,18 @@ package index
 import (
 	"bytes"
 	"github.com/246859/river/entry"
+	"github.com/pkg/errors"
+)
+
+var (
+	ErrNilIterator = errors.New("nil iterator")
 )
 
 type Key = []byte
 
 // RangeOption iterate over all keys in [min, max] with give order
 // if min and max are nil, it will return all the keys in index,
-// if min is nil and max is not nil, it will return the keys less or equal than max,
+// if min is nil and max is not nil, it will return the keys compare or equal than max,
 // if max is nil and min is not nil, it will return the keys greater or equal than min,
 // both of them are not nil, it will return the keys in range [min, max],
 // then filter the keys with the give pattern if it is not empty.
@@ -31,11 +36,17 @@ type Hint struct {
 	Hint entry.Hint
 }
 
-// LessKey returns a function that decide how to sort keys in memory index
-type LessKey func(a, b Key) bool
+const (
+	Less = -1 + iota
+	Equal
+	Greater
+)
 
-func DefaultLessKey(a, b Key) bool {
-	return bytes.Compare(a, b) < 0
+// Compare returns a function that decide how to compare keys
+type Compare func(a, b Key) int
+
+func DefaultCompare(a, b Key) int {
+	return bytes.Compare(a, b)
 }
 
 // Index storage a set of index hints and define index operation apis that implemented by concrete data struct.
@@ -54,6 +65,8 @@ type Index interface {
 	Iterator(opt RangeOption) (Iterator, error)
 	// Close releases the resources and close indexer
 	Close() error
+	// Compare returns -1-less, 0-equal, 1-greater
+	Compare(k1, k2 Key) int
 }
 
 // Iterator record snapshot of index hints at a certain moment, iterate them in the given order by cursor
