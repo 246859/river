@@ -148,7 +148,7 @@ func TestValidate(t *testing.T) {
 			Type:  DataEntryType,
 			Key:   []byte("key"),
 			Value: []byte("value"),
-			TTL:   0,
+			TTL:   1,
 			TxId:  0,
 		}
 		err := Validate(entry)
