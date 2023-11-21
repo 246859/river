@@ -12,10 +12,10 @@ func TestEntry_Marshal_UnMarshal(t *testing.T) {
 	// #1
 	{
 		datas := []Entry{
-			{Key: []byte("hello world!"), Value: []byte("world!"), Type: DataEntryType, Batch: 1, TTL: time.Now().UnixMilli()},
-			{Key: []byte(""), Value: []byte(""), Type: DeletedEntryType, Batch: 2, TTL: time.Now().UnixMilli()},
-			{Key: []byte("hello world!ddddddddddddddddddddddddddddddddddddddddd"), Value: []byte("zcxzxcz"), Type: DataEntryType, Batch: 3, TTL: time.Now().UnixMilli()},
-			{Key: []byte("bbc"), Value: []byte(strings.Repeat("a", math.MaxInt32>>5)), Type: DataEntryType, Batch: 4, TTL: time.Now().UnixMilli()},
+			{Key: []byte("hello world!"), Value: []byte("world!"), Type: DataEntryType, TxId: 1, TTL: time.Now().UnixMilli()},
+			{Key: []byte(""), Value: []byte(""), Type: DeletedEntryType, TxId: 2, TTL: time.Now().UnixMilli()},
+			{Key: []byte("hello world!ddddddddddddddddddddddddddddddddddddddddd"), Value: []byte("zcxzxcz"), Type: DataEntryType, TxId: 3, TTL: time.Now().UnixMilli()},
+			{Key: []byte("bbc"), Value: []byte(strings.Repeat("a", math.MaxInt32>>5)), Type: DataEntryType, TxId: 4, TTL: time.Now().UnixMilli()},
 		}
 
 		for _, entry := range datas {
@@ -60,7 +60,7 @@ func TestHeader_Marshal_UnMarshal(t *testing.T) {
 		datas := []Header{
 			{Type: DataEntryType, TTL: time.Now().UnixMilli(), Batch: 1, Ksz: 10, Vsz: 20},
 			{Type: DeletedEntryType, TTL: time.Now().UnixMilli(), Batch: 1, Ksz: 10, Vsz: 20},
-			{Type: BatchFinishedEntryType, TTL: time.Now().UnixMilli(), Batch: 1, Ksz: 10, Vsz: 20},
+			{Type: TxnFinishedEntryType, TTL: time.Now().UnixMilli(), Batch: 1, Ksz: 10, Vsz: 20},
 			{Type: DataEntryType, TTL: time.Now().UnixMilli(), Batch: 10, Ksz: 10, Vsz: 10000},
 			{Type: DataEntryType, TTL: time.Now().UnixMilli(), Batch: 1, Ksz: 100, Vsz: 2000},
 		}
@@ -123,7 +123,7 @@ func TestValidate(t *testing.T) {
 			Key:   []byte("key"),
 			Value: []byte("value"),
 			TTL:   time.Now().Add(time.Hour).UnixMilli(),
-			Batch: 0,
+			TxId:  0,
 		}
 		err := Validate(entry)
 		assert.NotNil(t, err)
@@ -136,7 +136,7 @@ func TestValidate(t *testing.T) {
 			Key:   nil,
 			Value: []byte("value"),
 			TTL:   time.Now().Add(time.Hour).UnixMilli(),
-			Batch: 0,
+			TxId:  0,
 		}
 		err := Validate(entry)
 		assert.NotNil(t, err)
@@ -149,7 +149,7 @@ func TestValidate(t *testing.T) {
 			Key:   []byte("key"),
 			Value: []byte("value"),
 			TTL:   0,
-			Batch: 0,
+			TxId:  0,
 		}
 		err := Validate(entry)
 		assert.NotNil(t, err)

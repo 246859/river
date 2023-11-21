@@ -33,7 +33,7 @@ func (d BinaryEntry) MarshalEntry(entry Entry) ([]byte, error) {
 		Ksz:   uint32(len(entry.Key)),
 		Vsz:   uint32(len(entry.Value)),
 		TTL:   entry.TTL,
-		Batch: entry.Batch,
+		Batch: entry.TxId,
 	})
 
 	if err != nil {

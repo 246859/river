@@ -20,11 +20,13 @@ const (
 
 	DeletedEntryType
 
-	BatchFinishedEntryType
+	TxnCommitEntryType
+
+	TxnFinishedEntryType
 )
 
 func CheckEntryType(t EType) error {
-	if t < DataEntryType || t > BatchFinishedEntryType {
+	if t < DataEntryType || t > TxnFinishedEntryType {
 		return errors.Wrapf(ErrInvalidEntryType, "%d", t)
 	}
 	return nil
@@ -36,8 +38,8 @@ type Entry struct {
 	Key   []byte
 	Value []byte
 
-	TTL   int64
-	Batch int64
+	TTL  int64
+	TxId int64
 }
 
 // Header represents a header of data entry
@@ -59,6 +61,11 @@ type Hint struct {
 	Offset int64
 	// ttl
 	TTL int64
+}
+
+type EntryHint struct {
+	Entry
+	Hint
 }
 
 type Marshaler interface {
@@ -152,6 +159,9 @@ func LeftTTl(ttl int64) time.Duration {
 	return time.Duration(ttl - UnixMill())
 }
 
+// IsExpired
+// if ttl is 0, represents of persistent
+// only if ttl > 0, entry has live time
 func IsExpired(ttl int64) bool {
-	return ttl <= UnixMill()
+	return ttl > 0 && ttl <= UnixMill()
 }
