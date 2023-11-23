@@ -50,24 +50,6 @@ type Header struct {
 	Ksz   uint32
 	Vsz   uint32
 }
-
-// Hint represents the position of record in which file specified by fid
-type Hint struct {
-	// represents entry storage in which file
-	Fid uint32
-	// block
-	Block uint32
-	// chunk offset
-	Offset int64
-	// ttl
-	TTL int64
-}
-
-type EntryHint struct {
-	Entry
-	Hint
-}
-
 type Marshaler interface {
 	MarshalEntry(entry Entry) ([]byte, error)
 }
@@ -84,21 +66,11 @@ type HeaderUnmarshaler interface {
 	UnMarshalHeader(raws []byte) (Header, int, error)
 }
 
-type HintMarshaler interface {
-	MarshalHint(hint Hint) ([]byte, error)
-}
-
-type HintUnMarshaler interface {
-	UnMarshalHint(rawdata []byte) (Hint, error)
-}
-
 type Serializer interface {
 	Marshaler
 	UnMarshaler
 	HeaderMarshaler
 	HeaderUnmarshaler
-	HintMarshaler
-	HintUnMarshaler
 }
 
 var defaultMarshaler = BinaryEntry{}
@@ -117,14 +89,6 @@ func MarshalHeader(header Header) ([]byte, int, error) {
 
 func UnMarshalHeader(rawdata []byte) (Header, int, error) {
 	return defaultMarshaler.UnMarshalHeader(rawdata)
-}
-
-func MarshalHint(hint Hint) ([]byte, error) {
-	return defaultMarshaler.MarshalHint(hint)
-}
-
-func UnMarshalHint(rawdata []byte) (Hint, error) {
-	return defaultMarshaler.UnMarshalHint(rawdata)
 }
 
 // Validate validates the given entry if is a valid data entry

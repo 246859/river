@@ -5,14 +5,6 @@ import "encoding/binary"
 // BinaryEntry Binary data format
 type BinaryEntry struct{}
 
-// MaxHintSize
-// +-----+-------+--------+------+
-// | fid | block | offset | ttl  |
-// +-----+-------+--------+------+
-// | 5 B | 5 B   | 10 B   | 10 B |
-// +-----+-------+--------+------+
-const MaxHintSize = binary.MaxVarintLen32*2 + binary.MaxVarintLen64*2
-
 // MaxHeaderSize
 // |                     31 B                   |
 // +------+------+----------+--------+----------+---------+---------+
@@ -146,57 +138,4 @@ func (d BinaryEntry) UnMarshalHeader(raws []byte) (Header, int, error) {
 	}
 
 	return header, offset, nil
-}
-
-func (d BinaryEntry) MarshalHint(hint Hint) ([]byte, error) {
-	var (
-		hintBytes = make([]byte, MaxHintSize)
-		offset    = 0
-	)
-
-	// data file id
-	offset += binary.PutVarint(hintBytes[offset:], int64(hint.Fid))
-
-	// entry offset at file
-	offset += binary.PutVarint(hintBytes[offset:], int64(hint.Block))
-
-	// update timestamp
-	offset += binary.PutVarint(hintBytes[offset:], hint.Offset)
-
-	// update timestamp
-	offset += binary.PutVarint(hintBytes[offset:], hint.TTL)
-
-	return hintBytes, nil
-}
-
-func (d BinaryEntry) UnMarshalHint(rawdata []byte) (Hint, error) {
-	var (
-		hint   Hint
-		offset = 0
-	)
-
-	if rawdata == nil {
-		return hint, ErrNilRawData
-	}
-
-	fid, idOff := binary.Varint(rawdata[offset:])
-	offset += idOff
-
-	block, bOff := binary.Varint(rawdata[offset:])
-	offset += bOff
-
-	chunkOffset, cOff := binary.Varint(rawdata[offset:])
-	offset += cOff
-
-	ttl, ttlOff := binary.Varint(rawdata[offset:])
-	offset += ttlOff
-
-	hint = Hint{
-		Fid:    uint32(fid),
-		Block:  uint32(block),
-		Offset: chunkOffset,
-		TTL:    ttl,
-	}
-
-	return hint, nil
 }

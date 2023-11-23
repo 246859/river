@@ -2,7 +2,6 @@ package index
 
 import (
 	"bytes"
-	"github.com/246859/river/entry"
 	"github.com/pkg/errors"
 )
 
@@ -28,12 +27,6 @@ type RangeOption struct {
 	Pattern Key
 	// return order of elements, default is ascending
 	Descend bool
-}
-
-// Hint represents a kev hint data
-type Hint struct {
-	Key  Key
-	Hint entry.Hint
 }
 
 const (

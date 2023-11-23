@@ -2,7 +2,6 @@ package riverdb
 
 import (
 	"github.com/246859/river/entry"
-	"github.com/246859/river/wal"
 	"unsafe"
 )
 
@@ -22,22 +21,6 @@ func memHash(data []byte) uint64 {
 	h := FastRand()
 	ptr := unsafe.Pointer(unsafe.SliceData(data))
 	return uint64(memhash(ptr, uintptr(h), uintptr(len(data))))
-}
-
-func hintToWalPos(hint entry.Hint) wal.ChunkPos {
-	return wal.ChunkPos{
-		Fid:    hint.Fid,
-		Block:  hint.Block,
-		Offset: hint.Offset,
-	}
-}
-
-func walPosToHint(pos wal.ChunkPos) entry.Hint {
-	return entry.Hint{
-		Fid:    pos.Fid,
-		Block:  pos.Block,
-		Offset: pos.Offset,
-	}
 }
 
 func isExpiredOrDeleted(en entry.Entry) bool {

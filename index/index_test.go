@@ -3,9 +3,12 @@ package index
 import (
 	"bytes"
 	entry2 "github.com/246859/river/entry"
+	"github.com/246859/river/wal"
 	"github.com/stretchr/testify/assert"
 	"sort"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestIndexer(t *testing.T) {
@@ -24,9 +27,9 @@ func TestIndexer(t *testing.T) {
 }
 
 func testIndexer_Get(t *testing.T, indexer Index) {
-	bar := Hint{Key: []byte("bar"), Hint: entry2.Hint{Fid: 1, Offset: 2}}
-	foo := Hint{Key: []byte("foo"), Hint: entry2.Hint{Fid: 4, Offset: 5}}
-	bob := Hint{Key: []byte("bob"), Hint: entry2.Hint{Fid: 7, Offset: 8}}
+	bar := Hint{Key: []byte("bar"), ChunkPos: wal.ChunkPos{Fid: 1, Offset: 2}}
+	foo := Hint{Key: []byte("foo"), ChunkPos: wal.ChunkPos{Fid: 4, Offset: 5}}
+	bob := Hint{Key: []byte("bob"), ChunkPos: wal.ChunkPos{Fid: 7, Offset: 8}}
 	nilE := Hint{Key: nil}
 
 	indexer.Put(bar)
@@ -50,8 +53,8 @@ func testIndexer_Get(t *testing.T, indexer Index) {
 }
 
 func testIndexer_Put(t *testing.T, indexer Index) {
-	bar := Hint{Key: []byte("bar"), Hint: entry2.Hint{Fid: 1, Offset: 2}}
-	foo := Hint{Key: []byte("foo"), Hint: entry2.Hint{Fid: 4, Offset: 5}}
+	bar := Hint{Key: []byte("bar"), ChunkPos: wal.ChunkPos{Fid: 1, Offset: 2}}
+	foo := Hint{Key: []byte("foo"), ChunkPos: wal.ChunkPos{Fid: 4, Offset: 5}}
 	nilE := Hint{Key: nil}
 
 	err := indexer.Put(bar)
@@ -68,9 +71,9 @@ func testIndexer_Put(t *testing.T, indexer Index) {
 }
 
 func testIndexer_Del(t *testing.T, indexer Index) {
-	bar := Hint{Key: []byte("bar"), Hint: entry2.Hint{Fid: 1, Offset: 2}}
-	foo := Hint{Key: []byte("foo"), Hint: entry2.Hint{Fid: 4, Offset: 5}}
-	bob := Hint{Key: []byte("bob"), Hint: entry2.Hint{Fid: 7, Offset: 8}}
+	bar := Hint{Key: []byte("bar"), ChunkPos: wal.ChunkPos{Fid: 1, Offset: 2}}
+	foo := Hint{Key: []byte("foo"), ChunkPos: wal.ChunkPos{Fid: 4, Offset: 5}}
+	bob := Hint{Key: []byte("bob"), ChunkPos: wal.ChunkPos{Fid: 7, Offset: 8}}
 
 	err := indexer.Put(bar)
 	assert.Nil(t, err)
@@ -92,10 +95,10 @@ func testIndexer_Del(t *testing.T, indexer Index) {
 
 func testIndexer_Iterator(t *testing.T, indexer Index) {
 	hints := []Hint{
-		{Key: []byte("bob"), Hint: entry2.Hint{Fid: 1, Offset: 2}},
-		{Key: []byte("jack"), Hint: entry2.Hint{Fid: 4, Offset: 5}},
-		{Key: []byte("aaa"), Hint: entry2.Hint{Fid: 7, Offset: 8}},
-		{Key: []byte("adas"), Hint: entry2.Hint{Fid: 10, Offset: 11}},
+		{Key: []byte("bob"), ChunkPos: wal.ChunkPos{Fid: 1, Offset: 2}},
+		{Key: []byte("jack"), ChunkPos: wal.ChunkPos{Fid: 4, Offset: 5}},
+		{Key: []byte("aaa"), ChunkPos: wal.ChunkPos{Fid: 7, Offset: 8}},
+		{Key: []byte("adas"), ChunkPos: wal.ChunkPos{Fid: 10, Offset: 11}},
 	}
 
 	for _, h := range hints {
@@ -119,5 +122,24 @@ func testIndexer_Iterator(t *testing.T, indexer Index) {
 		}
 		assert.EqualValues(t, hints[i], next)
 		i++
+	}
+}
+
+func TestHintMarshal_UnMarshal(t *testing.T) {
+	hints := []Hint{
+		{Key: []byte("foo"), TTL: 1, ChunkPos: wal.ChunkPos{Fid: 1, Block: 1, Offset: 1}},
+		{Key: []byte(""), TTL: time.Now().UnixMilli(), ChunkPos: wal.ChunkPos{Fid: 1, Block: 1, Offset: 1}},
+		{Key: []byte("abc"), TTL: -1, ChunkPos: wal.ChunkPos{Fid: 1, Block: 1, Offset: 1}},
+		{Key: []byte("kkk"), TTL: 1, ChunkPos: wal.ChunkPos{Fid: 1, Block: 1, Offset: 1}},
+		{Key: []byte(strings.Repeat("a", 1000)), TTL: 1, ChunkPos: wal.ChunkPos{Fid: 1, Block: 1, Offset: 1}},
+		{Key: []byte("bob"), TTL: 1, ChunkPos: wal.ChunkPos{Fid: 3, Block: 6, Offset: 200}},
+	}
+
+	for _, hint := range hints {
+		rawdata := MarshalHint(hint)
+		assert.NotNil(t, rawdata)
+
+		marshalHint := UnMarshalHint(rawdata)
+		assert.Equal(t, hint, marshalHint)
 	}
 }

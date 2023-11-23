@@ -90,31 +90,6 @@ func TestHeader_Marshal_UnMarshal(t *testing.T) {
 	}
 }
 
-func TestHint_Marshal_UnMarshal(t *testing.T) {
-	// #1
-	{
-		datas := []Hint{
-			{Fid: 0, Block: 0, Offset: 0, TTL: time.Now().UnixMilli()},
-			{Fid: 1, Block: 2, Offset: 3, TTL: time.Now().UnixMilli()},
-			{Fid: 4, Block: 5, Offset: 6, TTL: time.Now().UnixMilli()},
-			{Fid: 7, Block: 8, Offset: 9, TTL: time.Now().UnixMilli()},
-		}
-
-		for _, hint := range datas {
-			marshalHint, err := MarshalHint(hint)
-			assert.Nil(t, err)
-			assert.True(t, len(marshalHint) > 0)
-
-			unMarshalHint, err := UnMarshalHint(marshalHint)
-			assert.Nil(t, err)
-			assert.Equal(t, hint.Fid, unMarshalHint.Fid)
-			assert.Equal(t, hint.Block, unMarshalHint.Block)
-			assert.Equal(t, hint.Offset, unMarshalHint.Offset)
-			assert.Equal(t, hint.TTL, unMarshalHint.TTL)
-		}
-	}
-}
-
 func TestValidate(t *testing.T) {
 	// redundant type
 	{
