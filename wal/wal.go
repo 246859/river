@@ -376,7 +376,7 @@ func (w *Wal) sync(size int64, force bool) error {
 
 	// check if is reach threshold
 	w.bytesWritten += size
-	needSync := w.bytesWritten >= w.option.FsyncThreshold
+	needSync := w.option.FsyncThreshold > 0 && w.bytesWritten >= w.option.FsyncThreshold
 	if needSync {
 		err := w.active.Sync()
 		if err == nil {
