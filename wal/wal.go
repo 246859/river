@@ -458,10 +458,19 @@ func (w *Wal) Purge() error {
 	return nil
 }
 
+// IsEmpty check wal data if is empty
 func (w *Wal) IsEmpty() bool {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 	return w.active.Size() == 0 && w.immutables.Len() == 0
+}
+
+// ActiveFid returns current active file id
+func (w *Wal) ActiveFid() uint32 {
+	if w.active != nil {
+		return w.active.Fid()
+	}
+	return 0
 }
 
 func newFileIterator(files []File) (FileIterator, error) {
