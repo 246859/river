@@ -10,7 +10,6 @@ import (
 	"path"
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -87,6 +86,13 @@ func Open(options Options, opts ...Option) (*DB, error) {
 	return db, nil
 }
 
+const (
+	// db is merging data
+	dbMerging uint8 = 1 << iota
+	// db is already closed
+	dbClosed
+)
+
 // DB represents a db instance, which stores wal file in a specific data directory
 type DB struct {
 	data  *wal.Wal
@@ -96,9 +102,7 @@ type DB struct {
 	// transaction manager
 	tx *tx
 
-	// db status
-	closed  atomic.Bool // db is closed
-	merging atomic.Bool // db is merging
+	flag uint8
 
 	// read-write lock
 	mu sync.Mutex
@@ -283,7 +287,7 @@ func (db *DB) ranges(it index.Iterator, handler RangeHandler) error {
 
 // Sync syncs written buffer to disk
 func (db *DB) Sync() error {
-	if db.closed.Load() {
+	if db.flag&dbClosed != 0 {
 		return ErrDBClosed
 	}
 
@@ -295,7 +299,7 @@ func (db *DB) Sync() error {
 
 // Close closes db
 func (db *DB) Close() error {
-	if db.closed.Load() {
+	if db.flag&dbClosed != 0 {
 		return ErrDBClosed
 	}
 

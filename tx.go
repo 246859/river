@@ -122,9 +122,8 @@ func (tx *tx) discardTxn(txn *Txn, fail bool) {
 	tx.amu.Lock()
 	// remove from active
 	tx.active.remove(txn)
-	tx.amu.Unlock()
-
 	txn.discard(fail)
+	tx.amu.Unlock()
 }
 
 func (tx *tx) commit(txn *Txn) error {
@@ -241,23 +240,24 @@ type Txn struct {
 	startedTs   int64
 	committedTs int64
 
-	closed atomic.Bool
+	closed bool
 }
 
 // Begin begins a new transaction
 func (db *DB) Begin(readonly bool) (*Txn, error) {
-	if db.closed.Load() {
+	if db.flag&dbClosed != 0 {
 		return nil, ErrDBClosed
 	}
+
 	return db.tx.begin(db, readonly), nil
 }
 
 func (txn *Txn) Commit() error {
-	if txn.db.closed.Load() {
+	if txn.db.flag&dbClosed != 0 {
 		return ErrDBClosed
 	}
 
-	if txn.closed.Load() {
+	if txn.closed {
 		return ErrTxnClosed
 	}
 
@@ -265,11 +265,11 @@ func (txn *Txn) Commit() error {
 }
 
 func (txn *Txn) RollBack() error {
-	if txn.db.closed.Load() {
+	if txn.db.flag&dbClosed != 0 {
 		return ErrDBClosed
 	}
 
-	if txn.closed.Load() {
+	if txn.closed {
 		return ErrTxnClosed
 	}
 
@@ -423,7 +423,7 @@ func (txn *Txn) Range(opt index.RangeOption, handler RangeHandler) error {
 	var rangeErr error
 
 	itFn := func(item *entry.Entry) bool {
-		if txn.closed.Load() {
+		if txn.closed {
 			rangeErr = ErrTxnClosed
 			return false
 		}
@@ -516,13 +516,14 @@ func (txn *Txn) trackWrite(key Key) {
 	}
 }
 func (txn *Txn) discard(fail bool) {
+	// must be called in lock
 	if fail {
 		txn.reads = nil
 		txn.writes = nil
 	}
 	txn.db = nil
 	txn.pending = nil
-	txn.closed.Store(true)
+	txn.closed = true
 }
 
 // in transaction, data will be written into pendingWriters.
