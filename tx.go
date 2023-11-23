@@ -118,19 +118,19 @@ func (tx *tx) begin(db *DB, readonly bool) *Txn {
 	return txn
 }
 
-func (tx *tx) discardTxn(txn *Txn) {
+func (tx *tx) discardTxn(txn *Txn, fail bool) {
 	tx.amu.Lock()
 	// remove from active
 	tx.active.remove(txn)
 	tx.amu.Unlock()
 
-	txn.discard()
+	txn.discard(fail)
 }
 
 func (tx *tx) commit(txn *Txn) error {
 
 	if txn.readonly {
-		tx.discardTxn(txn)
+		tx.discardTxn(txn, false)
 		return nil
 	}
 
@@ -172,9 +172,13 @@ func (tx *tx) commit(txn *Txn) error {
 		}
 	}
 
-	tx.discardTxn(txn)
+	tx.discardTxn(txn, false)
 
 	return nil
+}
+
+func (tx *tx) rollback(txn *Txn) {
+	tx.discardTxn(txn, true)
 }
 
 func keyWithLen(length int) Key {
@@ -249,11 +253,28 @@ func (db *DB) Begin(readonly bool) (*Txn, error) {
 }
 
 func (txn *Txn) Commit() error {
+	if txn.db.closed.Load() {
+		return ErrDBClosed
+	}
+
 	if txn.closed.Load() {
 		return ErrTxnClosed
 	}
 
 	return txn.db.tx.commit(txn)
+}
+
+func (txn *Txn) RollBack() error {
+	if txn.db.closed.Load() {
+		return ErrDBClosed
+	}
+
+	if txn.closed.Load() {
+		return ErrTxnClosed
+	}
+
+	txn.db.tx.rollback(txn)
+	return nil
 }
 
 func (txn *Txn) Get(key Key) (Value, error) {
@@ -494,7 +515,11 @@ func (txn *Txn) trackWrite(key Key) {
 		txn.writes[hash] = struct{}{}
 	}
 }
-func (txn *Txn) discard() {
+func (txn *Txn) discard(fail bool) {
+	if fail {
+		txn.reads = nil
+		txn.writes = nil
+	}
 	txn.db = nil
 	txn.pending = nil
 	txn.closed.Store(true)

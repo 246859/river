@@ -111,6 +111,12 @@ type DB struct {
 // Get returns value match the given key
 func (db *DB) Get(key Key) (Value, error) {
 	tx, err := db.Begin(true)
+	defer func() {
+		if err != nil {
+			_ = tx.RollBack()
+		}
+	}()
+
 	if err != nil {
 		return nil, err
 	}
@@ -126,6 +132,12 @@ func (db *DB) Get(key Key) (Value, error) {
 // if ttl <= 0, the key will never expired
 func (db *DB) Put(key Key, value Value, ttl time.Duration) error {
 	tx, err := db.Begin(false)
+	defer func() {
+		if err != nil {
+			_ = tx.RollBack()
+		}
+	}()
+
 	if err != nil {
 		return err
 	}
@@ -139,6 +151,12 @@ func (db *DB) Put(key Key, value Value, ttl time.Duration) error {
 // Del remove the value match the give key from db
 func (db *DB) Del(key Key) error {
 	tx, err := db.Begin(false)
+	defer func() {
+		if err != nil {
+			_ = tx.RollBack()
+		}
+	}()
+
 	if err != nil {
 		return err
 	}
@@ -153,6 +171,12 @@ func (db *DB) Del(key Key) error {
 // if ttl <= 0, the key will never expired
 func (db *DB) Expire(key Key, ttl time.Duration) error {
 	tx, err := db.Begin(false)
+	defer func() {
+		if err != nil {
+			_ = tx.RollBack()
+		}
+	}()
+
 	if err != nil {
 		return err
 	}
@@ -166,6 +190,12 @@ func (db *DB) Expire(key Key, ttl time.Duration) error {
 // TTL returns left live time of the specified key
 func (db *DB) TTL(key Key) (time.Duration, error) {
 	tx, err := db.Begin(true)
+	defer func() {
+		if err != nil {
+			_ = tx.RollBack()
+		}
+	}()
+
 	if err != nil {
 		return 0, err
 	}
@@ -180,6 +210,12 @@ func (db *DB) TTL(key Key) (time.Duration, error) {
 // and call handler for each key-value
 func (db *DB) Range(option index.RangeOption, handler RangeHandler) error {
 	tx, err := db.Begin(true)
+	defer func() {
+		if err != nil {
+			_ = tx.RollBack()
+		}
+	}()
+
 	if err != nil {
 		return err
 	}
