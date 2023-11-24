@@ -206,7 +206,7 @@ func TestDB_Put_Get_2(t *testing.T) {
 
 		getV, err := db.Get(key)
 		assert.Nil(t, err)
-		assert.Equal(t, []byte(nil), getV)
+		assert.Equal(t, []byte{}, getV)
 	}
 }
 
