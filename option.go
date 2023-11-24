@@ -53,32 +53,32 @@ type Options struct {
 	filelock string
 }
 
-func (opt Options) revise() error {
+func revise(opt Options) (Options, error) {
 	if opt.Dir == "" {
-		return fmt.Errorf("db data dir must be specified")
+		return opt, fmt.Errorf("db data dir must be specified")
 	}
 
 	if opt.Compare == nil {
-		return fmt.Errorf("key comparator must be specified")
+		return opt, fmt.Errorf("key comparator must be specified")
 	}
 
 	if opt.MaxSize <= 0 {
-		return fmt.Errorf("invalid max file size: %d", opt.MaxSize)
+		return opt, fmt.Errorf("invalid max file size: %d", opt.MaxSize)
 	}
 
 	if (int64(opt.BlockCache) * wal.MaxBlockSize) >= opt.MaxSize {
-		return fmt.Errorf("block cache size should be less then max file size")
+		return opt, fmt.Errorf("block cache size should be less then max file size")
 	}
 
 	if opt.FsyncThreshold >= opt.MaxSize {
-		return fmt.Errorf("sync threshold should be less than max file size")
+		return opt, fmt.Errorf("sync threshold should be less than max file size")
 	}
 
 	opt.dataDir = filepath.Join(opt.Dir, dataName)
 	opt.mergeDir = filepath.Join(opt.Dir, mergeName)
 	opt.filelock = filepath.Join(opt.Dir, lockName)
 
-	return nil
+	return opt, nil
 }
 
 func WithDir(dir string) Option {
