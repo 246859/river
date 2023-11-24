@@ -5,12 +5,15 @@ import (
 	"github.com/246859/river/file"
 	"github.com/246859/river/index"
 	"github.com/246859/river/wal"
+	"path/filepath"
 )
 
 const (
-	dataName = "data"
-	hintName = "hint"
-	lockName = "river"
+	dataName     = "data"
+	mergeName    = "merge"
+	hintName     = "hint"
+	finishedName = "finished"
+	lockName     = "river"
 )
 
 const defaultMaxFileSize = file.MB * 256
@@ -44,9 +47,13 @@ type Options struct {
 	Compare index.Compare
 	// manually gc after closed db
 	ClosedGc bool
+
+	dataDir  string
+	mergeDir string
+	filelock string
 }
 
-func (opt Options) check() error {
+func (opt Options) revise() error {
 	if opt.Dir == "" {
 		return fmt.Errorf("db data dir must be specified")
 	}
@@ -66,6 +73,10 @@ func (opt Options) check() error {
 	if opt.FsyncThreshold >= opt.MaxSize {
 		return fmt.Errorf("sync threshold should be less than max file size")
 	}
+
+	opt.dataDir = filepath.Join(opt.Dir, dataName)
+	opt.mergeDir = filepath.Join(opt.Dir, mergeName)
+	opt.filelock = filepath.Join(opt.Dir, lockName)
 
 	return nil
 }
