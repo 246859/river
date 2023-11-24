@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 )
 
 var (
@@ -25,8 +26,8 @@ const (
 // Merge clean the redundant data entry in db, shrinking the db size
 // if transfer is false, it will only record of merged data, will not replace them to data dir
 func (db *DB) Merge(transfer bool) error {
-	db.mergeMu.Lock()
-	defer db.mergeMu.Unlock()
+	db.mergeOp.mu.Lock()
+	defer db.mergeOp.mu.Unlock()
 
 	if db.flag&dbMerging != 0 {
 		return ErrDBMerging
@@ -137,6 +138,8 @@ func (db *DB) loadIndexFromHint() error {
 type mergeOP struct {
 	db *DB
 
+	mu sync.Mutex
+
 	// merged data
 	merged *wal.Wal
 	// hint data
@@ -151,6 +154,7 @@ func (op *mergeOP) doTransfer() error {
 	if _, err := os.Stat(mergeDir); err != nil {
 		return nil
 	}
+	defer os.RemoveAll(mergeDir)
 
 	if op.finish == nil {
 		if err := op.loadFinishedWal(); err != nil {
@@ -160,9 +164,13 @@ func (op *mergeOP) doTransfer() error {
 
 	// check if finished
 	lastFid, err := hasFinished(op.finish)
-	if err != nil {
+	// if not finished, just return
+	if errors.Is(err, ErrMergedNotFinished) {
+		return nil
+	} else if err != nil {
 		return err
 	}
+
 	// close file, it will be moved to data dir after soon
 	if err = op.finish.Close(); err != nil {
 		return err

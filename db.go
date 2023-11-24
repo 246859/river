@@ -52,6 +52,12 @@ func Open(options Options, opts ...Option) (*DB, error) {
 		return nil, err
 	}
 
+	// check if is need to transfer merged data
+	db.mergeOp = &mergeOP{db: db}
+	if err := db.mergeOp.doTransfer(); err != nil {
+		return nil, err
+	}
+
 	// load data from dir
 	if err := db.loadData(); err != nil {
 		return nil, err
@@ -63,11 +69,10 @@ func Open(options Options, opts ...Option) (*DB, error) {
 	}
 
 	// initialize transaction manager
-	tx, err := newTx()
+	db.tx, err = newTx()
 	if err != nil {
 		return nil, err
 	}
-	db.tx = tx
 
 	return db, nil
 }
@@ -86,7 +91,6 @@ type DB struct {
 	index index.Index
 
 	mergeOp *mergeOP
-	mergeMu sync.Mutex
 
 	// transaction manager
 	tx *tx
