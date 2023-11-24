@@ -193,7 +193,7 @@ func loadLenInKey(key Key) int {
 
 func wrapTxnSequence(txn *Txn, seq []*entry.Entry) []*entry.Entry {
 	bytes := keyWithLen(len(seq))
-	seq = append([]*entry.Entry{{TxId: txn.id.Int64(), Type: entry.TxnCommitEntryType, Key: bytes}})
+	seq = append([]*entry.Entry{{TxId: txn.id.Int64(), Type: entry.TxnCommitEntryType, Key: bytes}}, seq...)
 	seq = append(seq, &entry.Entry{TxId: txn.id.Int64(), Type: entry.TxnFinishedEntryType, Key: bytes})
 	return seq
 }
@@ -212,6 +212,7 @@ func newTxn(db *DB, readonly bool) *Txn {
 	}
 
 	if !tx.readonly {
+		tx.writes = make(map[uint64]struct{})
 		tx.pending = &btreePending{
 			tree: btree.NewG[*entry.Entry](32, func(a, b *entry.Entry) bool {
 				return db.option.Compare(a.Key, b.Key) == index.Less
@@ -284,7 +285,7 @@ func (txn *Txn) RollBack() error {
 func (txn *Txn) Get(key Key) (Value, error) {
 	var en entry.Entry
 	if key == nil {
-		return en.Value, entry.ErrNilKey
+		return en.Value, ErrNilKey
 	}
 
 	if !txn.readonly {
@@ -307,19 +308,26 @@ func (txn *Txn) Get(key Key) (Value, error) {
 	return en.Value, nil
 }
 
-func (txn *Txn) get() {
-
+func (txn *Txn) TTL(key Key) (time.Duration, error) {
+	ttl, err := txn.ttl(key)
+	if err != nil {
+		return 0, err
+	}
+	if ttl == 0 {
+		return 0, nil
+	}
+	return entry.LeftTTl(ttl), nil
 }
 
-func (txn *Txn) TTL(key Key) (time.Duration, error) {
+func (txn *Txn) ttl(key Key) (int64, error) {
 	if key == nil {
-		return -1, entry.ErrNilKey
+		return -1, ErrNilKey
 	}
 
 	if !txn.readonly {
 		// if find it from pendingWrites
 		if txnEn, has := txn.pending.get(key); has && !isExpiredOrDeleted(*txnEn) {
-			return entry.LeftTTl(txnEn.TTL), nil
+			return txnEn.TTL, nil
 		}
 		// no need to track reading from pendingWrites
 		// for it depend on pending data that impossible to be modified by other transactions
@@ -331,7 +339,11 @@ func (txn *Txn) TTL(key Key) (time.Duration, error) {
 		return -1, err
 	}
 
-	return entry.LeftTTl(hint.TTL), nil
+	if hint.TTL <= 0 {
+		return 0, nil
+	} else {
+		return hint.TTL, nil
+	}
 }
 
 func (txn *Txn) Put(key Key, value Value, ttl time.Duration) error {
@@ -349,24 +361,30 @@ func (txn *Txn) Put(key Key, value Value, ttl time.Duration) error {
 	if ttl == 0 {
 		en.TTL = 0
 	} else if ttl < 0 {
-		duration, err := txn.TTL(key)
-		if err != nil {
+		ttl, err := txn.ttl(key)
+		if errors.Is(err, ErrKeyNotFound) {
+			en.TTL = 0
+		} else if err != nil {
 			return err
+		} else {
+			en.TTL = ttl
 		}
-		en.TTL = entry.NewTTL(duration)
 	}
 
 	return txn.put(en)
 }
 
 func (txn *Txn) Del(key Key) error {
+	// check if key exists
 	_, err := txn.TTL(key)
-	if err != nil {
+	if errors.Is(err, ErrKeyNotFound) {
+		return nil
+	} else if err != nil {
 		return err
 	}
 
 	en := entry.Entry{
-		Type: entry.DataEntryType,
+		Type: entry.DeletedEntryType,
 		Key:  key,
 	}
 	return txn.put(en)
@@ -377,31 +395,10 @@ func (txn *Txn) Expire(key Key, ttl time.Duration) error {
 	if err != nil {
 		return err
 	}
-
-	en := entry.Entry{
-		Type:  entry.DataEntryType,
-		Key:   key,
-		Value: value,
-		TTL:   entry.NewTTL(ttl),
-	}
-
-	// if tll > 0, update the ttl
-	// if ttl == 0, persistent
-	// if ttl < 0, apply old ttl
-	if ttl == 0 {
-		en.TTL = 0
-	} else if ttl < 0 {
-		duration, err := txn.TTL(key)
-		if err != nil {
-			return err
-		}
-		en.TTL = entry.NewTTL(duration)
-	}
-
-	return txn.put(en)
+	return txn.Put(key, value, ttl)
 }
 
-func (txn *Txn) Range(opt index.RangeOption, handler RangeHandler) error {
+func (txn *Txn) Range(opt RangeOptions, handler RangeHandler) error {
 	it, err := txn.db.index.Iterator(opt)
 	if err != nil {
 		return err
@@ -431,45 +428,41 @@ func (txn *Txn) Range(opt index.RangeOption, handler RangeHandler) error {
 			rangeErr = ErrTxnClosed
 			return false
 		}
-
-		next := handler(item.Key)
-		// if read data from index, may be modified by another transaction
-		if _, has := txn.pending.get(item.Key); !has {
-			txn.trackRead(item.Key)
-		}
-		return next
+		return handler(item.Key)
 	}
 
-	// combine pending iterator and index iterator to snapshot
-	txn.pending.iterate(func(item *entry.Entry) bool {
-		var put bool
+	if txn.pending != nil {
+		// combine pending iterator and index iterator to snapshot
+		txn.pending.iterate(func(item *entry.Entry) bool {
+			var put bool
 
-		// greater than or equal to min
-		if opt.Min != nil && hasMin && compare(min.Key, item.Key) >= index.Equal {
-			put = true
-		}
+			// greater than or equal to min
+			if opt.Min != nil && hasMin && compare(min.Key, item.Key) >= index.Equal {
+				put = true
+			}
 
-		// less than or equal to max
-		if opt.Max != nil && hasMax && compare(max.Key, item.Key) <= index.Equal {
-			put = true
-		}
+			// less than or equal to max
+			if opt.Max != nil && hasMax && compare(max.Key, item.Key) <= index.Equal {
+				put = true
+			}
 
-		// no range
-		if opt.Min == nil && opt.Max == nil {
-			put = true
-		}
+			// no range
+			if opt.Min == nil && opt.Max == nil {
+				put = true
+			}
 
-		// pattern match
-		if opt.Pattern != nil {
-			put = regexp.MustCompile(str.BytesToString(opt.Pattern)).Match(item.Key)
-		}
+			// pattern match
+			if opt.Pattern != nil {
+				put = regexp.MustCompile(str.BytesToString(opt.Pattern)).Match(item.Key)
+			}
 
-		if put {
-			snapshot.ReplaceOrInsert(item)
-		}
+			if put {
+				snapshot.ReplaceOrInsert(item)
+			}
 
-		return true
-	})
+			return true
+		})
+	}
 
 	if opt.Descend {
 		snapshot.Descend(itFn)
@@ -485,9 +478,12 @@ func (txn *Txn) put(en entry.Entry) error {
 		return ErrTxnReadonly
 	}
 
-	err := entry.Validate(en)
-	if err != nil {
-		return err
+	if en.Key == nil {
+		return ErrNilKey
+	}
+
+	if en.Type != entry.DataEntryType && en.Type != entry.DeletedEntryType {
+		return entry.ErrRedundantEntryType
 	}
 
 	// check size
