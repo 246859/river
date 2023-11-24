@@ -99,7 +99,7 @@ func loadDataDir(dir string, ext string, cache *lruCache, bufferPool *bytebuffer
 		var fid uint32
 		_, err := fmt.Sscanf(entry.Name(), "%d"+"."+ext, &fid)
 		if err != nil {
-			return nil, nil, err
+			continue
 		}
 		fids = append(fids, fid)
 	}
