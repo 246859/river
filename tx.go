@@ -249,6 +249,10 @@ func (db *DB) Begin(readonly bool) (*Txn, error) {
 		return nil, ErrDBClosed
 	}
 
+	if !readonly && db.flag&dbMerging != 0 {
+		return nil, ErrDBMerging
+	}
+
 	return db.tx.begin(db, readonly), nil
 }
 
@@ -327,7 +331,7 @@ func (txn *Txn) TTL(key Key) (time.Duration, error) {
 		return -1, err
 	}
 
-	return entry.LeftTTl(hint.Hint.TTL), nil
+	return entry.LeftTTl(hint.TTL), nil
 }
 
 func (txn *Txn) Put(key Key, value Value, ttl time.Duration) error {
