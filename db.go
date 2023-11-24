@@ -2,11 +2,13 @@ package riverdb
 
 import (
 	"github.com/246859/river/entry"
+	"github.com/246859/river/file"
 	"github.com/246859/river/index"
 	"github.com/246859/river/wal"
 	"github.com/gofrs/flock"
 	"github.com/pkg/errors"
 	"io"
+	"os"
 	"runtime"
 	"sync"
 	"time"
@@ -14,6 +16,7 @@ import (
 
 var (
 	ErrKeyNotFound    = errors.New("key not found")
+	ErrNilKey         = entry.ErrNilKey
 	ErrDBClosed       = errors.New("db is already closed")
 	ErrDBMerging      = errors.New("db is merging data")
 	ErrDirAlreadyUsed = errors.New("dir already used by another process")
@@ -37,14 +40,14 @@ func Open(options Options, opts ...Option) (*DB, error) {
 	}
 
 	// check options
-	err := options.revise()
+	opt, err := revise(options)
 	if err != nil {
 		return nil, err
 	}
 
 	db := &DB{
 		serializer: entry.BinaryEntry{},
-		option:     options,
+		option:     opt,
 	}
 
 	// only one process can be active at dir
@@ -87,7 +90,6 @@ const (
 // DB represents a db instance, which stores wal file in a specific data directory
 type DB struct {
 	data  *wal.Wal
-	hint  *wal.Wal
 	index index.Index
 
 	mergeOp *mergeOP
@@ -125,8 +127,9 @@ func (db *DB) Get(key Key) (Value, error) {
 }
 
 // Put
-// puts a key-value into db. overwrite value if key already exists.
-// if ttl <= 0, the key will never expired
+// puts a key-value pair into db, overwrite value if key already exists.
+// nil key is invalid, but nil value is allowed.
+// if tll == 0, key will be persisted, or ttl < 0, key will apply the previous ttl.
 func (db *DB) Put(key Key, value Value, ttl time.Duration) error {
 	tx, err := db.Begin(false)
 	defer func() {
@@ -145,7 +148,8 @@ func (db *DB) Put(key Key, value Value, ttl time.Duration) error {
 	return tx.Commit()
 }
 
-// Del remove the value match the give key from db
+// Del remove the key-value pair match the give key from db.
+// it will return nil if key not exist
 func (db *DB) Del(key Key) error {
 	tx, err := db.Begin(false)
 	defer func() {
@@ -203,9 +207,11 @@ func (db *DB) TTL(key Key) (time.Duration, error) {
 	return ttl, tx.Commit()
 }
 
+type RangeOptions = index.RangeOption
+
 // Range iterates over all the keys that match the given RangeOption
 // and call handler for each key-value
-func (db *DB) Range(option index.RangeOption, handler RangeHandler) error {
+func (db *DB) Range(option RangeOptions, handler RangeHandler) error {
 	tx, err := db.Begin(true)
 	defer func() {
 		if err != nil {
@@ -264,9 +270,6 @@ func (db *DB) ranges(it index.Iterator, handler RangeHandler) error {
 	}
 	for {
 		hint, out := it.Next()
-		if out {
-			return it.Close()
-		}
 
 		if entry.IsExpired(hint.TTL) {
 			continue
@@ -275,7 +278,30 @@ func (db *DB) ranges(it index.Iterator, handler RangeHandler) error {
 		if !handler(hint.Key) {
 			return nil
 		}
+
+		if out {
+			return it.Close()
+		}
 	}
+}
+
+// Purge remove all entries from data wal
+func (db *DB) Purge() error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	err := db.data.Purge()
+	if err != nil {
+		return err
+	}
+	if err := db.mergeOp.clean(); err != nil {
+		return err
+	}
+
+	if err = db.loadData(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Sync syncs written buffer to disk
@@ -295,12 +321,6 @@ func (db *DB) closeWal() error {
 	err := db.data.Close()
 	if err != nil {
 		return err
-	}
-	if db.hint != nil {
-		err := db.hint.Close()
-		if err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -345,7 +365,6 @@ func (db *DB) Close() error {
 func (db *DB) discard() {
 	db.flag |= dbClosed
 	db.data = nil
-	db.hint = nil
 	db.index = nil
 	db.tx = nil
 	db.fu = nil
@@ -412,9 +431,11 @@ func (db *DB) loadIndex() error {
 	// files after the lastFid maybe has been written new data, so we need to load it from data
 	lastFid, err := hasFinished(fwal)
 	if errors.Is(err, ErrMergedNotFinished) {
-		minFid = lastFid + 1
+		minFid = 0
 	} else if err != nil {
 		return err
+	} else {
+		minFid = lastFid + 1
 	}
 
 	// if data dir has finished-file, db can load index from hint without load whole data file
@@ -536,6 +557,10 @@ func (db *DB) lockDir() error {
 
 	if db.fu == nil {
 		lockpath := db.option.filelock
+		_, err := file.OpenStdFile(lockpath, os.O_CREATE, 0644)
+		if err != nil {
+			return err
+		}
 		db.fu = flock.New(lockpath)
 	}
 
