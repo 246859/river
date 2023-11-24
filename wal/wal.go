@@ -342,7 +342,7 @@ func (w *Wal) rotate() error {
 // Iterator returns an FileIterator
 // maxFid determines the file range for the iterator
 // pos determines the chunk position for the iterator
-func (w *Wal) Iterator(maxFid uint32, pos ChunkPos) (FileIterator, error) {
+func (w *Wal) Iterator(minFid, maxFid uint32, pos ChunkPos) (FileIterator, error) {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
@@ -356,11 +356,14 @@ func (w *Wal) Iterator(maxFid uint32, pos ChunkPos) (FileIterator, error) {
 		if f.Fid > maxFid {
 			return false
 		}
-		fs = append(fs, f.File)
+
+		if f.Fid >= minFid && f.Fid <= maxFid {
+			fs = append(fs, f.File)
+		}
 		return true
 	})
 
-	if w.active.Fid() <= maxFid {
+	if w.active.Fid() >= minFid && w.active.Fid() <= maxFid {
 		fs = append(fs, w.active)
 	}
 

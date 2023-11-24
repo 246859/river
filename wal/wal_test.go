@@ -220,7 +220,7 @@ func TestWal_Iterator(t *testing.T) {
 
 	// normal use
 	{
-		it, err := wal.Iterator(0, ChunkPos{})
+		it, err := wal.Iterator(0, wal.ActiveFid(), ChunkPos{})
 		assert.Nil(t, err)
 
 		var i int
@@ -246,7 +246,7 @@ func TestWal_Iterator(t *testing.T) {
 	{
 		assert.Greater(t, len(chunkPos), 5)
 
-		it, err := wal.Iterator(0, chunkPos[4])
+		it, err := wal.Iterator(0, wal.ActiveFid(), chunkPos[4])
 		assert.NotEqualValues(t, 0, it.IndexPos().Block)
 		assert.Nil(t, err)
 
