@@ -7,7 +7,6 @@ import (
 	"github.com/gofrs/flock"
 	"github.com/pkg/errors"
 	"io"
-	"path"
 	"runtime"
 	"sync"
 	"time"
@@ -16,6 +15,7 @@ import (
 var (
 	ErrKeyNotFound    = errors.New("key not found")
 	ErrDBClosed       = errors.New("db is already closed")
+	ErrDBMerging      = errors.New("db is merging data")
 	ErrDirAlreadyUsed = errors.New("dir already used by another process")
 )
 
@@ -37,30 +37,30 @@ func Open(options Options, opts ...Option) (*DB, error) {
 	}
 
 	// check options
-	err := options.check()
+	err := options.revise()
 	if err != nil {
 		return nil, err
-	}
-
-	// try to lock dir
-	fileLockPath := path.Join(options.Dir, lockName)
-	filelock := flock.New(fileLockPath)
-	success, err := filelock.TryRLock()
-	if err != nil {
-		return nil, err
-	}
-	if !success {
-		return nil, ErrDirAlreadyUsed
 	}
 
 	db := &DB{
-		fu:         filelock,
 		serializer: entry.BinaryEntry{},
 		option:     options,
 	}
 
-	// initialize memory index
-	db.index = index.BtreeIndex(48, options.Compare)
+	// only one process can be active at dir
+	if err := db.lockDir(); err != nil {
+		return nil, err
+	}
+
+	// load data from dir
+	if err := db.loadData(); err != nil {
+		return nil, err
+	}
+
+	// load index
+	if err := db.loadIndex(); err != nil {
+		return nil, err
+	}
 
 	// initialize transaction manager
 	tx, err := newTx()
@@ -68,20 +68,6 @@ func Open(options Options, opts ...Option) (*DB, error) {
 		return nil, err
 	}
 	db.tx = tx
-
-	// load data from dir
-	data, err := db.loadData()
-	if err != nil {
-		return nil, err
-	}
-	db.data = data
-
-	// load index
-	memIndex, err := db.loadIndex()
-	if err != nil {
-		return nil, err
-	}
-	db.index = memIndex
 
 	return db, nil
 }
@@ -98,6 +84,9 @@ type DB struct {
 	data  *wal.Wal
 	hint  *wal.Wal
 	index index.Index
+
+	mergeOp *mergeOP
+	mergeMu sync.Mutex
 
 	// transaction manager
 	tx *tx
@@ -238,7 +227,7 @@ func (db *DB) get(key Key) (entry.Entry, error) {
 	}
 
 	// read raw data from wal
-	bytes, err := db.data.Read(hintToWalPos(hint.Hint))
+	bytes, err := db.data.Read(hint.ChunkPos)
 
 	if err != nil {
 		return entry.Entry{}, err
@@ -258,7 +247,7 @@ func (db *DB) getHint(key Key) (index.Hint, error) {
 		return hint, ErrKeyNotFound
 	}
 
-	if entry.IsExpired(hint.Hint.TTL) {
+	if entry.IsExpired(hint.TTL) {
 		return hint, ErrKeyNotFound
 	}
 
@@ -275,7 +264,7 @@ func (db *DB) ranges(it index.Iterator, handler RangeHandler) error {
 			return it.Close()
 		}
 
-		if entry.IsExpired(hint.Hint.TTL) {
+		if entry.IsExpired(hint.TTL) {
 			continue
 		}
 
@@ -297,15 +286,7 @@ func (db *DB) Sync() error {
 	return db.data.Sync()
 }
 
-// Close closes db
-func (db *DB) Close() error {
-	if db.flag&dbClosed != 0 {
-		return ErrDBClosed
-	}
-
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
+func (db *DB) closeWal() error {
 	// close the files
 	err := db.data.Close()
 	if err != nil {
@@ -317,17 +298,30 @@ func (db *DB) Close() error {
 			return err
 		}
 	}
+	return nil
+}
+
+// Close closes db
+func (db *DB) Close() error {
+	if db.flag&dbClosed != 0 {
+		return ErrDBClosed
+	}
+
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	err := db.closeWal()
+	if err != nil {
+		return err
+	}
 
 	// close index
-	if err = db.index.Close(); err != nil {
+	if err := db.index.Close(); err != nil {
 		return err
 	}
 
-	// release the file lock
-	if err := db.fu.Unlock(); err != nil {
-		return err
-	}
-	if err = db.fu.Close(); err != nil {
+	// release dir lock
+	if err := db.unlockDir(); err != nil {
 		return err
 	}
 
@@ -345,6 +339,7 @@ func (db *DB) Close() error {
 // discard db fields for convenient to gc
 // must be called in lock
 func (db *DB) discard() {
+	db.flag |= dbClosed
 	db.data = nil
 	db.hint = nil
 	db.index = nil
@@ -377,8 +372,9 @@ func (db *DB) doWrites(entries []*entry.Entry) error {
 	// update index
 	for i, pos := range chunkPos {
 		en := index.Hint{
-			Key:  entries[i].Key,
-			Hint: walPosToHint(pos),
+			Key:      entries[i].Key,
+			TTL:      entries[i].TTL,
+			ChunkPos: pos,
 		}
 
 		var err error
@@ -397,16 +393,45 @@ func (db *DB) doWrites(entries []*entry.Entry) error {
 	return nil
 }
 
-func (db *DB) loadIndex() (index.Index, error) {
-	return nil, nil
+func (db *DB) loadIndex() error {
+
+	db.index = index.BtreeIndex(64, db.option.Compare)
+
+	// check if data dir contains merged finished-file
+	fwal, err := openFinished(db.option.dataDir)
+	if err != nil {
+		return err
+	}
+
+	minFid, maxFid := uint32(0), db.data.ActiveFid()
+	// lastFid means that the last immutable wal file id before last merge operation. we can load part of index from hint,
+	// files after the lastFid maybe has been written new data, so we need to load it from data
+	lastFid, err := hasFinished(fwal)
+	if errors.Is(err, ErrMergedNotFinished) {
+		minFid = lastFid + 1
+	} else if err != nil {
+		return err
+	}
+
+	// if data dir has finished-file, db can load index from hint without load whole data file
+	if err := db.loadIndexFromHint(); err != nil {
+		return err
+	}
+
+	// we can skip the file before lastFid, their index maybe load from hint
+	err = db.loadIndexFromData(minFid, maxFid)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func (db *DB) loadData() (*wal.Wal, error) {
+func (db *DB) loadData() error {
 	options := db.option
 	// wal data
-	dataDir := path.Join(options.Dir, dataName)
 	datawal, err := wal.Open(wal.Option{
-		DataDir:        dataDir,
+		DataDir:        options.dataDir,
 		MaxFileSize:    options.MaxSize,
 		Ext:            dataName,
 		BlockCache:     options.BlockCache,
@@ -415,25 +440,27 @@ func (db *DB) loadData() (*wal.Wal, error) {
 	})
 
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return datawal, nil
-}
-
-func (db *DB) loadIndexFromHint() error {
+	db.data = datawal
 	return nil
 }
 
+type entryhint struct {
+	entry entry.Entry
+	pos   wal.ChunkPos
+}
+
 // load index from data files
-func (db *DB) loadIndexFromData() error {
+func (db *DB) loadIndexFromData(minFid, maxFid uint32) error {
 	var (
 		data         = db.data
 		memIndex     = db.index
-		txnSequences = make(map[int64][]entry.EntryHint, 1<<10)
+		txnSequences = make(map[int64][]entryhint, 1<<10)
 	)
 
 	// get the wal iterator
-	it, err := data.Iterator(0, wal.ChunkPos{})
+	it, err := data.Iterator(minFid, maxFid, wal.ChunkPos{})
 	if err != nil {
 		return err
 	}
@@ -455,30 +482,39 @@ func (db *DB) loadIndexFromData() error {
 			return err
 		}
 
+		// if is merged data, update index directly
+		if record.TxId == mergedTxnId && record.Type == entry.DataEntryType && !entry.IsExpired(record.TTL) {
+			err := memIndex.Put(index.Hint{Key: record.Key, TTL: record.TTL, ChunkPos: pos})
+			if err != nil {
+				return err
+			}
+			continue
+		}
+
 		// process record data
 		switch record.Type {
 		// transaction commit flag
 		case entry.TxnCommitEntryType:
 			expectedLen := loadLenInKey(record.Key)
-			txnSequences[record.TxId] = make([]entry.EntryHint, 0, expectedLen)
+			txnSequences[record.TxId] = make([]entryhint, 0, expectedLen)
 		// normal data flag
 		case entry.DataEntryType, entry.DeletedEntryType:
-			txnSequences[record.TxId] = append(txnSequences[record.TxId], entry.EntryHint{Entry: record, Hint: walPosToHint(pos)})
+			txnSequences[record.TxId] = append(txnSequences[record.TxId], entryhint{entry: record, pos: pos})
 		// transaction finished flag
 		case entry.TxnFinishedEntryType:
 			seqs := txnSequences[record.TxId]
 			for _, en := range seqs {
 				var idxErr error
 
-				switch en.Type {
+				switch en.entry.Type {
 				case entry.DataEntryType:
 					// skip if is expired
-					if entry.IsExpired(en.Entry.TTL) {
+					if entry.IsExpired(en.entry.TTL) {
 						continue
 					}
-					idxErr = memIndex.Put(index.Hint{Key: en.Key, Hint: en.Hint})
+					idxErr = memIndex.Put(index.Hint{Key: en.entry.Key, TTL: en.entry.TTL, ChunkPos: pos})
 				case entry.DeletedEntryType:
-					_, idxErr = memIndex.Del(en.Key)
+					_, idxErr = memIndex.Del(en.entry.Key)
 				}
 
 				if idxErr != nil {
@@ -486,6 +522,35 @@ func (db *DB) loadIndexFromData() error {
 				}
 			}
 		}
-
 	}
+}
+
+func (db *DB) lockDir() error {
+	if db.flag&dbClosed != 0 {
+		return ErrDBClosed
+	}
+
+	if db.fu == nil {
+		lockpath := db.option.filelock
+		db.fu = flock.New(lockpath)
+	}
+
+	// try to lock dir
+	lock, err := db.fu.TryLock()
+	if err != nil {
+		return err
+	}
+
+	if !lock {
+		return ErrDirAlreadyUsed
+	}
+	return nil
+}
+
+func (db *DB) unlockDir() error {
+	if db.flag&dbClosed != 0 {
+		return ErrDBClosed
+	}
+
+	return db.fu.Close()
 }
