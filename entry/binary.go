@@ -63,12 +63,10 @@ func (d BinaryEntry) UnMarshalEntry(bytes []byte) (Entry, error) {
 	entry.Type = header.Type
 	entry.TTL = header.TTL
 	entry.Key = make([]byte, header.Ksz)
-	copy(entry.Key, bytes[offset:])
+	entry.Value = make([]byte, header.Vsz)
 
-	if header.Vsz > 0 {
-		entry.Value = make([]byte, header.Vsz)
-		copy(entry.Value, bytes[offset+len(entry.Key):])
-	}
+	copy(entry.Key, bytes[offset:])
+	copy(entry.Value, bytes[offset+len(entry.Key):])
 
 	return entry, nil
 }
