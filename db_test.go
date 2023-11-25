@@ -4,8 +4,6 @@ import (
 	"github.com/246859/river/entry"
 	"github.com/246859/river/file"
 	"github.com/stretchr/testify/assert"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -15,15 +13,9 @@ import (
 func TestDB_Open(t *testing.T) {
 	// default open
 	{
-		db, err := Open(DefaultOptions, WithDir(filepath.Join(os.TempDir(), "river")))
+		_, closeDB, err := testDB(DefaultOptions)
 		assert.Nil(t, err)
-		assert.NotNil(t, db)
-
-		err = db.Purge()
-		assert.Nil(t, err)
-
-		err = db.Close()
-		assert.Nil(t, err)
+		assert.Nil(t, closeDB())
 	}
 
 	// error empty dir
@@ -82,14 +74,10 @@ func TestDB_Open(t *testing.T) {
 }
 
 func TestDB_Put_Get_1(t *testing.T) {
-	db, err := Open(DefaultOptions, WithDir(filepath.Join(os.TempDir(), "river")))
+	db, closeDB, err := testDB(DefaultOptions)
 	assert.Nil(t, err)
-	assert.NotNil(t, db)
-
 	defer func() {
-		err = db.Purge()
-		assert.Nil(t, err)
-		err = db.Close()
+		err := closeDB()
 		assert.Nil(t, err)
 	}()
 
@@ -117,14 +105,10 @@ func TestDB_Put_Get_1(t *testing.T) {
 }
 
 func TestDB_Put_Get_2(t *testing.T) {
-	db, err := Open(DefaultOptions, WithDir(filepath.Join(os.TempDir(), "river")))
+	db, closeDB, err := testDB(DefaultOptions)
 	assert.Nil(t, err)
-	assert.NotNil(t, db)
-
 	defer func() {
-		err = db.Purge()
-		assert.Nil(t, err)
-		err = db.Close()
+		err := closeDB()
 		assert.Nil(t, err)
 	}()
 
@@ -211,14 +195,10 @@ func TestDB_Put_Get_2(t *testing.T) {
 }
 
 func TestDB_Del(t *testing.T) {
-	db, err := Open(DefaultOptions, WithDir(filepath.Join(os.TempDir(), "river")))
+	db, closeDB, err := testDB(DefaultOptions)
 	assert.Nil(t, err)
-	assert.NotNil(t, db)
-
 	defer func() {
-		err = db.Purge()
-		assert.Nil(t, err)
-		err = db.Close()
+		err := closeDB()
 		assert.Nil(t, err)
 	}()
 
@@ -267,14 +247,10 @@ func TestDB_Del(t *testing.T) {
 }
 
 func TestDB_TTL(t *testing.T) {
-	db, err := Open(DefaultOptions, WithDir(filepath.Join(os.TempDir(), "river")))
+	db, closeDB, err := testDB(DefaultOptions)
 	assert.Nil(t, err)
-	assert.NotNil(t, db)
-
 	defer func() {
-		err = db.Purge()
-		assert.Nil(t, err)
-		err = db.Close()
+		err := closeDB()
 		assert.Nil(t, err)
 	}()
 
@@ -325,14 +301,10 @@ func TestDB_TTL(t *testing.T) {
 }
 
 func TestDB_Expire(t *testing.T) {
-	db, err := Open(DefaultOptions, WithDir(filepath.Join(os.TempDir(), "river")))
+	db, closeDB, err := testDB(DefaultOptions)
 	assert.Nil(t, err)
-	assert.NotNil(t, db)
-
 	defer func() {
-		err = db.Purge()
-		assert.Nil(t, err)
-		err = db.Close()
+		err := closeDB()
 		assert.Nil(t, err)
 	}()
 
@@ -426,14 +398,10 @@ func TestDB_Expire(t *testing.T) {
 }
 
 func TestDB_Range(t *testing.T) {
-	db, err := Open(DefaultOptions, WithDir(filepath.Join(os.TempDir(), "river")))
+	db, closeDB, err := testDB(DefaultOptions)
 	assert.Nil(t, err)
-	assert.NotNil(t, db)
-
 	defer func() {
-		err = db.Purge()
-		assert.Nil(t, err)
-		err = db.Close()
+		err := closeDB()
 		assert.Nil(t, err)
 	}()
 

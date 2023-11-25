@@ -8,37 +8,29 @@ import (
 )
 
 func TestDB_Backup(t *testing.T) {
-	db, err := Open(DefaultOptions, WithDir(filepath.Join(os.TempDir(), "river")))
+	db, closeDB, err := testDB(DefaultOptions)
 	assert.Nil(t, err)
-	assert.NotNil(t, db)
-
 	defer func() {
-		err = db.Purge()
-		assert.Nil(t, err)
-		err = db.Close()
+		err := closeDB()
 		assert.Nil(t, err)
 	}()
 
 	err = db.Put([]byte("hello world!"), []byte("hahahah"), 0)
 	assert.Nil(t, err)
 
-	err = db.Backup("now.zip")
+	err = db.Backup(filepath.Join(os.TempDir(), "now.zip"))
 	assert.Nil(t, err)
 }
 
 func TestDB_Recover(t *testing.T) {
-	db, err := Open(DefaultOptions, WithDir(filepath.Join(os.TempDir(), "river")))
+	db, closeDB, err := testDB(DefaultOptions)
 	assert.Nil(t, err)
-	assert.NotNil(t, db)
-
 	defer func() {
-		err = db.Purge()
-		assert.Nil(t, err)
-		err = db.Close()
+		err := closeDB()
 		assert.Nil(t, err)
 	}()
 
-	err = db.Recover("now.zip")
+	err = db.Recover(filepath.Join(os.TempDir(), "now.zip"))
 	assert.Nil(t, err)
 
 	value, err := db.Get([]byte("hello world!"))
