@@ -7,6 +7,7 @@ import (
 
 var (
 	ErrNilIterator = errors.New("nil iterator")
+	ErrClosed      = errors.New("index closed")
 )
 
 type Key = []byte

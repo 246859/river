@@ -45,6 +45,10 @@ func (b *BTree) Iterator(opt RangeOption) (Iterator, error) {
 }
 
 func (b *BTree) Get(key Key) (Hint, bool) {
+	if b.tree == nil {
+		return Hint{}, false
+	}
+
 	if key == nil {
 		return Hint{}, false
 	}
@@ -58,6 +62,11 @@ func (b *BTree) Put(h Hint) error {
 	if h.Key == nil {
 		return entry.ErrNilKey
 	}
+
+	if b.tree == nil {
+		return ErrClosed
+	}
+
 	b.mutex.Lock()
 
 	b.tree.ReplaceOrInsert(h)
@@ -71,6 +80,10 @@ func (b *BTree) Del(key Key) (bool, error) {
 		return false, entry.ErrNilKey
 	}
 
+	if b.tree == nil {
+		return false, ErrClosed
+	}
+
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
@@ -81,14 +94,23 @@ func (b *BTree) Del(key Key) (bool, error) {
 }
 
 func (b *BTree) Size() int {
+	if b.tree == nil {
+		return 0
+	}
 	return b.tree.Len()
 }
 
 func (b *BTree) Close() error {
+	b.mutex.Lock()
+	b.tree = nil
+	b.mutex.Unlock()
 	return nil
 }
 
 func newBTreeIterator(btr *BTree, opt RangeOption) (Iterator, error) {
+	if btr.tree == nil {
+		return nil, ErrClosed
+	}
 
 	var (
 		minHint = Hint{Key: opt.Min}
