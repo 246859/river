@@ -12,7 +12,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"sync"
 )
 
 var (
@@ -26,8 +25,6 @@ const (
 // Merge clean the redundant data entry in db, shrinking the db size
 // if transfer is false, it will only record of merged data, will not replace them to data dir
 func (db *DB) Merge(transfer bool) error {
-	db.mergeOp.mu.Lock()
-	defer db.mergeOp.mu.Unlock()
 
 	if db.flag&dbMerging != 0 {
 		return ErrDBMerging
@@ -36,6 +33,9 @@ func (db *DB) Merge(transfer bool) error {
 	if db.flag&dbClosed != 0 {
 		return ErrDBClosed
 	}
+
+	db.opmu.Lock()
+	defer db.opmu.Unlock()
 
 	db.mu.Lock()
 	// mark db is merging
@@ -108,6 +108,7 @@ func (db *DB) Merge(transfer bool) error {
 
 func (db *DB) loadIndexFromHint() error {
 	hint, err := openHint(db.option.dataDir)
+	defer hint.Close()
 	if err != nil {
 		return err
 	}
@@ -137,8 +138,6 @@ func (db *DB) loadIndexFromHint() error {
 
 type mergeOP struct {
 	db *DB
-
-	mu sync.Mutex
 
 	// merged data
 	merged *wal.Wal
@@ -323,6 +322,9 @@ func (op *mergeOP) doMerge(lastActiveId uint32) error {
 					return err
 				}
 			}
+
+			// release mem
+			txnSequences[record.TxId] = nil
 		}
 	}
 
