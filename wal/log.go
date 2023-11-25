@@ -523,8 +523,8 @@ func (l *LogFileChunkIterator) Next() ([]byte, ChunkPos, error) {
 	}
 
 	// compute the chunk size
-	chunkAt := int64(nextChunkPos.Block)*MaxBlockSize + nextChunkPos.Offset
-	nextChunkAt := int64(chunkPos.Block)*MaxBlockSize + chunkPos.Offset
+	nextChunkAt := int64(nextChunkPos.Block)*MaxBlockSize + nextChunkPos.Offset
+	chunkAt := int64(chunkPos.Block)*MaxBlockSize + chunkPos.Offset
 	chunkPos.Size = nextChunkAt - chunkAt
 
 	// update chunk index
