@@ -100,6 +100,7 @@ type DB struct {
 	opmu sync.Mutex
 	// read-write lock
 	mu sync.Mutex
+
 	fu *flock.Flock
 
 	serializer entry.Serializer
@@ -358,11 +359,6 @@ func (db *DB) Close() error {
 		return err
 	}
 
-	// close index
-	if err := db.index.Close(); err != nil {
-		return err
-	}
-
 	// release dir lock
 	if err := db.unlockDir(); err != nil {
 		return err
@@ -386,8 +382,11 @@ func (db *DB) lockDir() error {
 
 	if db.fu == nil {
 		lockpath := db.option.filelock
-		_, err := file.OpenStdFile(lockpath, os.O_CREATE, 0644)
+		fl, err := file.OpenStdFile(lockpath, os.O_CREATE, 0644)
 		if err != nil {
+			return err
+		}
+		if err = fl.Close(); err != nil {
 			return err
 		}
 		db.fu = flock.New(lockpath)
@@ -410,7 +409,15 @@ func (db *DB) unlockDir() error {
 		return ErrDBClosed
 	}
 
-	return db.fu.Close()
+	if err := db.fu.Unlock(); err != nil {
+		return err
+	}
+
+	if err := db.fu.Close(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // discard db fields for convenient to gc
