@@ -93,13 +93,8 @@ func (db *DB) Merge(transfer bool) error {
 		return err
 	}
 
-	// reload wal data
-	if err := db.loadData(); err != nil {
-		return err
-	}
-
-	// reload index
-	if err := db.loadIndex(); err != nil {
+	// reload data
+	if err = db.load(); err != nil {
 		return err
 	}
 
@@ -107,12 +102,7 @@ func (db *DB) Merge(transfer bool) error {
 }
 
 func (db *DB) loadIndexFromHint() error {
-	hint, err := openHint(db.option.dataDir)
-	defer hint.Close()
-	if err != nil {
-		return err
-	}
-
+	hint := db.hint
 	if hint.IsEmpty() {
 		return nil
 	}
@@ -130,6 +120,7 @@ func (db *DB) loadIndexFromHint() error {
 			}
 			return err
 		}
+		// ignore error when loading hint
 		db.index.Put(index.UnMarshalHint(rawhint))
 	}
 
@@ -376,18 +367,17 @@ func (op *mergeOP) finished(lastFid uint32) error {
 }
 
 func (op *mergeOP) Close() error {
-	if op.merged != nil {
-		if err := op.merged.Close(); err != nil {
-			return err
-		}
+	closes := []io.Closer{
+		op.merged,
+		op.hint,
+		op.finish,
 	}
-	if op.hint != nil {
-		if err := op.hint.Close(); err != nil {
-			return err
+
+	for _, closer := range closes {
+		if closer == (*wal.Wal)(nil) {
+			continue
 		}
-	}
-	if op.finish != nil {
-		if err := op.finish.Close(); err != nil {
+		if err := closer.Close(); err != nil {
 			return err
 		}
 	}

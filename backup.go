@@ -61,12 +61,7 @@ func (db *DB) Recover(srcpath string) error {
 	}
 
 	// reload data
-	if err := db.loadData(); err != nil {
-		return err
-	}
-
-	// reload index
-	if err := db.loadIndex(); err != nil {
+	if err := db.load(); err != nil {
 		return err
 	}
 
