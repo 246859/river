@@ -23,3 +23,8 @@ go.work
 # IDE settings
 .idea/
 .vscode/
+
+# archive
+.zip
+.tag.gz
+.tgz
