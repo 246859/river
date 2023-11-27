@@ -44,6 +44,8 @@ func newTx() (*tx, error) {
 
 // tx represents transaction manager
 type tx struct {
+	db *DB
+
 	ts atomic.Int64
 
 	// snowflake id generator
@@ -169,6 +171,20 @@ func (tx *tx) commit(txn *Txn) error {
 		if err != nil {
 			return err
 		}
+
+		// notify watcher
+		if db.watcher != nil {
+			for _, e := range pendingEntry {
+				event := &Event{entry: e}
+				switch e.Type {
+				case entry.DataEntryType:
+					event.Type = PutEvent
+				case entry.DeletedEntryType:
+					event.Type = DelEvent
+				}
+				db.watcher.push(event)
+			}
+		}
 	}
 
 	tx.discardTxn(txn, false)
@@ -177,6 +193,17 @@ func (tx *tx) commit(txn *Txn) error {
 }
 
 func (tx *tx) rollback(txn *Txn) {
+	db := txn.db
+	// notify watcher
+	if db.watcher != nil && !txn.readonly {
+		txn.pending.iterate(func(item *entry.Entry) bool {
+			db.watcher.push(&Event{
+				Type:  RollbackEvent,
+				entry: item,
+			})
+			return true
+		})
+	}
 	tx.discardTxn(txn, true)
 }
 

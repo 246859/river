@@ -30,6 +30,11 @@ func (db *DB) Backup(destpath string) error {
 	if err != nil {
 		return err
 	}
+
+	// notify watcher
+	if db.watcher != nil {
+		db.watcher.push(&Event{Type: BackupEvent})
+	}
 	return nil
 }
 
@@ -65,5 +70,9 @@ func (db *DB) Recover(srcpath string) error {
 		return err
 	}
 
+	// notify watcher
+	if db.watcher != nil {
+		db.watcher.push(&Event{Type: RecoverEvent})
+	}
 	return nil
 }

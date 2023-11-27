@@ -1,6 +1,7 @@
 package riverdb
 
 import (
+	"context"
 	"github.com/246859/river/entry"
 	"github.com/246859/river/file"
 	"github.com/246859/river/index"
@@ -32,11 +33,20 @@ type (
 	RangeHandler = func(key Key) bool
 )
 
-// Open returns a river db database
+// Open returns a river db instance
 func Open(options Options, opts ...Option) (*DB, error) {
+	return OpenWithCtx(context.Background(), options, opts...)
+}
+
+// OpenWithCtx returns a river db instance with context
+func OpenWithCtx(ctx context.Context, options Options, opts ...Option) (*DB, error) {
 	// apply options
 	for _, opt := range opts {
 		opt(&options)
+	}
+
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	// check options
@@ -49,6 +59,9 @@ func Open(options Options, opts ...Option) (*DB, error) {
 		serializer: entry.BinaryEntry{},
 		option:     opt,
 	}
+
+	// context
+	db.ctx, db.cancel = context.WithCancel(ctx)
 
 	// only one process can be active at dir
 	if err := db.lockDir(); err != nil {
@@ -72,6 +85,13 @@ func Open(options Options, opts ...Option) (*DB, error) {
 		return nil, err
 	}
 
+	if db.option.WatchSize > 0 {
+		db.watcher = newWatcher(db.option.WatchSize)
+		db.watcher.clear()
+		// new goroutine to watching events
+		go db.watcher.watch(db.ctx)
+	}
+
 	return db, nil
 }
 
@@ -84,23 +104,31 @@ const (
 
 // DB represents a db instance, which stores wal file in a specific data directory
 type DB struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	// wal files
 	data   *wal.Wal
 	hint   *wal.Wal
 	finish *wal.Wal
 
+	// mem index
 	index index.Index
+	// event watch
+	watcher *watcher
 
+	// merge operator
 	mergeOp *mergeOP
+	opmu    sync.Mutex
 
 	// transaction manager
 	tx *tx
 
+	// db status flag
 	flag uint8
 
-	opmu sync.Mutex
-	// read-write lock
 	mu sync.Mutex
-
+	// db file lock
 	fu *flock.Flock
 
 	serializer entry.Serializer
@@ -366,6 +394,7 @@ func (db *DB) Close() error {
 
 	// discard db
 	db.discard()
+	db.cancel()
 
 	// manually gc
 	if db.option.ClosedGc {

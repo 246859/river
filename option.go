@@ -26,6 +26,7 @@ var DefaultOptions = Options{
 	Fsync:          false,
 	FsyncThreshold: blockSize * (defaultMaxFileSize / file.MB),
 	Compare:        index.DefaultCompare,
+	WatchSize:      100,
 }
 
 // Option applying changes to the given option
@@ -43,6 +44,8 @@ type Options struct {
 	Fsync bool
 	// call sync when reach the threshold
 	FsyncThreshold int64
+	// kv put/get events size for watch queue, disabled if is 0
+	WatchSize int
 	// decide how to sort keys
 	Compare index.Compare
 	// manually gc after closed db

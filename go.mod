@@ -8,6 +8,7 @@ require (
 )
 
 require (
+	github.com/246859/containers v0.0.1 // indirect
 	github.com/bwmarrin/snowflake v0.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dstgo/filebox v1.0.1 // indirect

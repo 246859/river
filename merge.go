@@ -98,6 +98,11 @@ func (db *DB) Merge(transfer bool) error {
 		return err
 	}
 
+	// notify watcher
+	if db.watcher != nil {
+		db.watcher.push(&Event{Type: MergeEvent})
+	}
+
 	return nil
 }
 

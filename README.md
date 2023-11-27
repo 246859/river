@@ -17,10 +17,10 @@ RiverDB is a light-weight embeddable key-value nosql database, it is base on bit
 - Using WAL to store actual data on disk
 - Support for ACID transactions
 - Support zip backup and recover from zip
-- Supporting TTL
-- Support LRU block caching
+- Support data ttl
 - Support custom sorting rules
 - Support range matching and iteration
+- Support event watcher
 
 RiverDB can be used as a standalone database or as an underlying storage engine.
 
