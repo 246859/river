@@ -21,11 +21,11 @@ func (d BinaryEntry) MarshalEntry(entry Entry) ([]byte, error) {
 	}
 
 	headerBytes, offset, err := d.MarshalHeader(Header{
-		Type:  entry.Type,
-		Ksz:   uint32(len(entry.Key)),
-		Vsz:   uint32(len(entry.Value)),
-		TTL:   entry.TTL,
-		Batch: entry.TxId,
+		Type: entry.Type,
+		Ksz:  uint32(len(entry.Key)),
+		Vsz:  uint32(len(entry.Value)),
+		TTL:  entry.TTL,
+		TxId: entry.TxId,
 	})
 
 	if err != nil {
@@ -62,6 +62,7 @@ func (d BinaryEntry) UnMarshalEntry(bytes []byte) (Entry, error) {
 
 	entry.Type = header.Type
 	entry.TTL = header.TTL
+	entry.TxId = header.TxId
 	entry.Key = make([]byte, header.Ksz)
 	entry.Value = make([]byte, header.Vsz)
 
@@ -85,8 +86,8 @@ func (d BinaryEntry) MarshalHeader(header Header) ([]byte, int, error) {
 
 	// ttl
 	offset += binary.PutVarint(headerBytes[offset:], header.TTL)
-	// batch id
-	offset += binary.PutVarint(headerBytes[offset:], header.Batch)
+	// txn id
+	offset += binary.PutVarint(headerBytes[offset:], header.TxId)
 	// key size
 	offset += binary.PutVarint(headerBytes[offset:], int64(header.Ksz))
 	// value size
@@ -130,11 +131,11 @@ func (d BinaryEntry) UnMarshalHeader(raws []byte) (Header, int, error) {
 	offset += voff
 
 	header = Header{
-		TTL:   ttl,
-		Batch: batchId,
-		Type:  et,
-		Ksz:   uint32(ksz),
-		Vsz:   uint32(vsz),
+		TTL:  ttl,
+		TxId: batchId,
+		Type: et,
+		Ksz:  uint32(ksz),
+		Vsz:  uint32(vsz),
 	}
 
 	return header, offset, nil

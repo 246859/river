@@ -44,11 +44,11 @@ type Entry struct {
 
 // Header represents a header of data entry
 type Header struct {
-	Type  EType
-	TTL   int64
-	Batch int64
-	Ksz   uint32
-	Vsz   uint32
+	Type EType
+	TTL  int64
+	TxId int64
+	Ksz  uint32
+	Vsz  uint32
 }
 type Marshaler interface {
 	MarshalEntry(entry Entry) ([]byte, error)

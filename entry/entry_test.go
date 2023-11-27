@@ -58,11 +58,11 @@ func TestHeader_Marshal_UnMarshal(t *testing.T) {
 	// #1
 	{
 		datas := []Header{
-			{Type: DataEntryType, TTL: time.Now().UnixMilli(), Batch: 1, Ksz: 10, Vsz: 20},
-			{Type: DeletedEntryType, TTL: time.Now().UnixMilli(), Batch: 1, Ksz: 10, Vsz: 20},
-			{Type: TxnFinishedEntryType, TTL: time.Now().UnixMilli(), Batch: 1, Ksz: 10, Vsz: 20},
-			{Type: DataEntryType, TTL: time.Now().UnixMilli(), Batch: 10, Ksz: 10, Vsz: 10000},
-			{Type: DataEntryType, TTL: time.Now().UnixMilli(), Batch: 1, Ksz: 100, Vsz: 2000},
+			{Type: DataEntryType, TTL: time.Now().UnixMilli(), TxId: 1, Ksz: 10, Vsz: 20},
+			{Type: DeletedEntryType, TTL: time.Now().UnixMilli(), TxId: 1, Ksz: 10, Vsz: 20},
+			{Type: TxnFinishedEntryType, TTL: time.Now().UnixMilli(), TxId: 1, Ksz: 10, Vsz: 20},
+			{Type: DataEntryType, TTL: time.Now().UnixMilli(), TxId: 10, Ksz: 10, Vsz: 10000},
+			{Type: DataEntryType, TTL: time.Now().UnixMilli(), TxId: 1, Ksz: 100, Vsz: 2000},
 		}
 
 		for _, header := range datas {
