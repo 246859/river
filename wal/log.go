@@ -2,6 +2,7 @@ package wal
 
 import (
 	"encoding/binary"
+	"fmt"
 	"github.com/246859/river/file"
 	"github.com/246859/river/pkg/crc"
 	"github.com/pkg/errors"
@@ -176,11 +177,20 @@ func (log *LogFile) read(block uint32, chunkOffset int64) ([]byte, ChunkPos, err
 		readSize := int64(MaxBlockSize)
 		blockOffset := int64(block * MaxBlockSize)
 
+		// check if exceed file size
 		if blockOffset+readSize > fileSize {
 			readSize = fileSize - blockOffset
 		}
 
-		if chunkOffset >= readSize || readSize < ChunkHeaderSize {
+		// check block padding, goto next block
+		if MaxBlockSize-chunkOffset <= ChunkHeaderSize {
+			block++
+			chunkOffset = 0
+			continue
+		}
+
+		// read finished
+		if chunkOffset >= readSize || readSize <= ChunkHeaderSize {
 			return dataBytes, nextChunkPos, io.EOF
 		}
 
@@ -519,6 +529,9 @@ func (l *LogFileChunkIterator) Next() ([]byte, ChunkPos, error) {
 
 	dataBytes, nextChunkPos, err := l.f.read(chunkPos.Block, chunkPos.Offset)
 	if err != nil {
+		if !errors.Is(err, io.EOF) {
+			fmt.Println(fmt.Sprintf("%+v", chunkPos))
+		}
 		return nil, ChunkPos{}, err
 	}
 
