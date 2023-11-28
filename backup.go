@@ -1,14 +1,20 @@
 package riverdb
 
 import (
+	"fmt"
 	"github.com/dstgo/filebox"
 	"os"
+	"strings"
 )
 
 // Backup use tar gzip to compress data wal files to dest path
 func (db *DB) Backup(destpath string) error {
 	if db.mask.CheckAny(closed) {
 		return ErrDBClosed
+	}
+
+	if strings.HasPrefix(strings.ToLower(destpath), strings.ToLower(db.option.Dir)) {
+		return fmt.Errorf("archive destination should not in db directory")
 	}
 
 	db.opmu.Lock()
@@ -40,7 +46,7 @@ func (db *DB) Backup(destpath string) error {
 
 	// notify watcher
 	if db.watcher != nil {
-		db.watcher.push(&Event{Type: BackupEvent})
+		db.watcher.push(&Event{Type: BackupEvent, Value: destpath})
 	}
 	return nil
 }
@@ -87,7 +93,7 @@ func (db *DB) Recover(srcpath string) error {
 
 	// notify watcher
 	if db.watcher != nil {
-		db.watcher.push(&Event{Type: RecoverEvent})
+		db.watcher.push(&Event{Type: RecoverEvent, Value: srcpath})
 	}
 	return nil
 }

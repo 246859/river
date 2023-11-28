@@ -85,7 +85,7 @@ func OpenWithCtx(ctx context.Context, options Options, opts ...Option) (*DB, err
 	}
 
 	if db.option.WatchSize > 0 {
-		db.watcher = newWatcher(db.option.WatchSize)
+		db.watcher = newWatcher(db.option.WatchSize, db.option.WatchEvents...)
 		db.watcher.clear()
 		// new goroutine to watching events
 		go db.watcher.watch(db.ctx)
@@ -375,6 +375,7 @@ func (db *DB) Close() error {
 
 	db.mu.Lock()
 	defer db.mu.Unlock()
+	db.cancel()
 
 	err := db.closeWal()
 	if err != nil {
@@ -392,7 +393,6 @@ func (db *DB) Close() error {
 		return err
 	}
 
-	db.cancel()
 	// discard db
 	db.discard()
 

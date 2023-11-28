@@ -177,12 +177,14 @@ func (tx *tx) commit(txn *Txn) error {
 		// notify watcher
 		if db.watcher != nil {
 			for _, e := range pendingEntry {
-				event := &Event{entry: e}
+				event := &Event{Value: e}
 				switch e.Type {
 				case entry.DataEntryType:
 					event.Type = PutEvent
 				case entry.DeletedEntryType:
 					event.Type = DelEvent
+				default:
+					continue
 				}
 				db.watcher.push(event)
 			}
@@ -201,7 +203,7 @@ func (tx *tx) rollback(txn *Txn) {
 		txn.pending.iterate(func(item *entry.Entry) bool {
 			db.watcher.push(&Event{
 				Type:  RollbackEvent,
-				entry: item,
+				Value: item,
 			})
 			return true
 		})

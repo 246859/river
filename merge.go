@@ -75,6 +75,13 @@ func (db *DB) Merge(domerge bool) error {
 		return err
 	}
 
+	defer func() {
+		// notify watcher
+		if db.watcher != nil {
+			db.watcher.push(&Event{Type: MergeEvent, Value: lastActiveId})
+		}
+	}()
+
 	if !domerge {
 		return nil
 	}
@@ -95,11 +102,6 @@ func (db *DB) Merge(domerge bool) error {
 	// reload data
 	if err = db.load(); err != nil {
 		return err
-	}
-
-	// notify watcher
-	if db.watcher != nil {
-		db.watcher.push(&Event{Type: MergeEvent})
 	}
 
 	return nil

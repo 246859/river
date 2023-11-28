@@ -3,8 +3,8 @@ package riverdb
 import (
 	"context"
 	"github.com/246859/containers/queues"
-	"github.com/246859/river/entry"
 	"github.com/pkg/errors"
+	"slices"
 	"sync"
 	"time"
 )
@@ -38,23 +38,30 @@ func (db *DB) Watch() (<-chan *Event, error) {
 // Event represents a push event
 type Event struct {
 	Type  EventType
-	entry *entry.Entry
+	Value any
 }
 
-func newWatcher(maxsize int) *watcher {
+func newWatcher(maxsize int, expected ...EventType) *watcher {
 	return &watcher{
-		events:  queues.NewArrayQueue[*Event](maxsize),
-		eventCh: make(chan *Event, 200),
+		maxsize:  maxsize,
+		expected: expected,
+		events:   queues.NewArrayQueue[*Event](maxsize),
+		eventCh:  make(chan *Event, 200),
 	}
 }
 
 // watcher has the responsibility of maintaining events queue and channel
 // it will send events while the behavior of database is changed
 type watcher struct {
-	maxsize int
-	events  *queues.ArrayQueue[*Event]
-	eventCh chan *Event
-	mu      sync.Mutex
+	maxsize  int
+	expected []EventType
+	events   *queues.ArrayQueue[*Event]
+	eventCh  chan *Event
+	mu       sync.Mutex
+}
+
+func (w *watcher) expect(et EventType) bool {
+	return slices.Contains(w.expected, et)
 }
 
 func (w *watcher) pop() *Event {
@@ -68,6 +75,9 @@ func (w *watcher) push(eve *Event) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.events.Size() >= w.maxsize {
+		return
+	}
+	if !w.expect(eve.Type) {
 		return
 	}
 	w.events.Push(eve)
@@ -90,7 +100,7 @@ watch:
 			if event != nil {
 				w.eventCh <- event
 			} else {
-				time.Sleep(time.Millisecond * 50)
+				time.Sleep(5 * time.Millisecond)
 			}
 		}
 	}

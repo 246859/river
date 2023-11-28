@@ -26,7 +26,8 @@ var DefaultOptions = Options{
 	Fsync:          false,
 	FsyncThreshold: blockSize * (defaultMaxFileSize / file.MB),
 	Compare:        index.DefaultCompare,
-	WatchSize:      100,
+	WatchSize:      2000,
+	WatchEvents:    []EventType{PutEvent, DelEvent},
 }
 
 // Option applying changes to the given option
@@ -46,6 +47,8 @@ type Options struct {
 	FsyncThreshold int64
 	// kv put/get events size for watch queue, disabled if is 0
 	WatchSize int
+	// specified events to watch
+	WatchEvents []EventType
 	// decide how to sort keys
 	Compare index.Compare
 	// manually gc after closed db
@@ -111,6 +114,18 @@ func WithFsync(sync bool) Option {
 func WithFsyncThreshold(threshold int64) Option {
 	return func(option *Options) {
 		option.FsyncThreshold = threshold
+	}
+}
+
+func WithWatchSize(size int) Option {
+	return func(option *Options) {
+		option.WatchSize = size
+	}
+}
+
+func WithWatchEvent(events ...EventType) Option {
+	return func(option *Options) {
+		option.WatchEvents = events
 	}
 }
 
