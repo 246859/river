@@ -1,9 +1,18 @@
 package riverdb
 
 import (
+	"crypto/sha1"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
+
+func TestMemHash(t *testing.T) {
+	s := []byte("hello world!")
+	hash1 := memHash(s)
+	hash2 := memHash(s)
+	assert.Equal(t, hash1, hash2)
+	sha1.Sum(s)
+}
 
 func TestMask(t *testing.T) {
 	const (

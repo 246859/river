@@ -14,11 +14,12 @@ func memhash(p unsafe.Pointer, h, s uintptr) uintptr
 //go:linkname FastRand runtime.fastrand
 func FastRand() uint32
 
+var h = FastRand()
+
 // memHash is the hash function used by go map, it utilizes available hardware instructions(behaves
 // as aeshash if aes instruction is available).
 // NOTE: The hash seed changes for every process. So, this cannot be used as a persistent hash.
 func memHash(data []byte) uint64 {
-	h := FastRand()
 	ptr := unsafe.Pointer(unsafe.SliceData(data))
 	return uint64(memhash(ptr, uintptr(h), uintptr(len(data))))
 }
