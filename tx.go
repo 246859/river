@@ -112,6 +112,7 @@ func (tx *tx) cleanCommitted() {
 func (tx *tx) begin(db *DB, readonly bool) *Txn {
 	txn := newTxn(db, readonly)
 	txn.id = tx.generateID()
+	txn.startedTs = tx.newTs()
 
 	tx.amu.Lock()
 	tx.active.push(txn)
@@ -165,12 +166,13 @@ func (tx *tx) commit(txn *Txn) error {
 		tx.committed = append(tx.committed, txn)
 
 		db.mu.Lock()
-		defer db.mu.Unlock()
 		// do writes
 		err := db.doWrites(pendingEntry)
 		if err != nil {
+			db.mu.Unlock()
 			return err
 		}
+		db.mu.Unlock()
 
 		// notify watcher
 		if db.watcher != nil {
@@ -233,9 +235,8 @@ func newPendingTree(compare index.Compare) *btree.BTreeG[*entry.Entry] {
 
 func newTxn(db *DB, readonly bool) *Txn {
 	tx := &Txn{
-		db:        db,
-		readonly:  readonly,
-		startedTs: time.Now().UnixNano(),
+		db:       db,
+		readonly: readonly,
 	}
 
 	if !tx.readonly {
@@ -281,24 +282,24 @@ func (db *DB) Begin(readonly bool) (*Txn, error) {
 }
 
 func (txn *Txn) Commit() error {
-	if txn.db.mask.CheckAny(closed) {
-		return ErrDBClosed
-	}
-
 	if txn.closed {
 		return ErrTxnClosed
+	}
+
+	if txn.db.mask.CheckAny(closed) {
+		return ErrDBClosed
 	}
 
 	return txn.db.tx.commit(txn)
 }
 
 func (txn *Txn) RollBack() error {
-	if txn.db.mask.CheckAny(closed) {
-		return ErrDBClosed
-	}
-
 	if txn.closed {
 		return ErrTxnClosed
+	}
+
+	if txn.db.mask.CheckAny(closed) {
+		return ErrDBClosed
 	}
 
 	txn.db.tx.rollback(txn)
