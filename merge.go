@@ -2,8 +2,8 @@ package riverdb
 
 import (
 	"encoding/binary"
+	"fmt"
 	"github.com/246859/river/entry"
-	"github.com/246859/river/file"
 	"github.com/246859/river/index"
 	"github.com/246859/river/wal"
 	"github.com/pkg/errors"
@@ -23,23 +23,20 @@ const (
 )
 
 // Merge clean the redundant data entry in db, shrinking the db size
-// if transfer is false, it will only record of merged data, will not replace them to data dir
-func (db *DB) Merge(transfer bool) error {
+// if domerge is false, it will only record of merged data, will not replace them to data dir
+func (db *DB) Merge(domerge bool) error {
 
-	if db.flag&dbMerging != 0 {
-		return ErrDBMerging
-	}
-
-	if db.flag&dbClosed != 0 {
+	if db.mask.CheckAny(closed) {
 		return ErrDBClosed
 	}
 
 	db.opmu.Lock()
 	defer db.opmu.Unlock()
 
+	db.mask.Store(merging)
+	defer db.mask.Remove(merging)
+
 	db.mu.Lock()
-	// mark db is merging
-	db.flag |= dbMerging
 
 	// return if db data is empty
 	if db.data.IsEmpty() {
@@ -69,6 +66,8 @@ func (db *DB) Merge(transfer bool) error {
 
 	// do real merge
 	if err := op.doMerge(lastActiveId); err != nil {
+		_ = op.Close()
+		_ = op.clean()
 		return err
 	}
 	// close merge operator
@@ -76,7 +75,7 @@ func (db *DB) Merge(transfer bool) error {
 		return err
 	}
 
-	if !transfer {
+	if !domerge {
 		return nil
 	}
 
@@ -170,6 +169,7 @@ func (op *mergeOP) doTransfer() error {
 	if err = op.finish.Close(); err != nil {
 		return err
 	}
+	op.finish = nil
 
 	// remove original data
 	for fid := uint32(0); fid <= lastFid; fid++ {
@@ -232,6 +232,7 @@ func (op *mergeOP) load() error {
 }
 
 func (op *mergeOP) reload() error {
+	_ = op.Close()
 	err := op.clean()
 	if err != nil {
 		return err
@@ -246,7 +247,7 @@ func (op *mergeOP) reload() error {
 func (op *mergeOP) loadMergedWal() error {
 	merged, err := wal.Open(wal.Option{
 		DataDir:     op.db.option.mergeDir,
-		MaxFileSize: file.GB,
+		MaxFileSize: op.db.option.MaxSize,
 		Ext:         dataName,
 	})
 	op.merged = merged
@@ -275,6 +276,7 @@ func (op *mergeOP) doMerge(lastActiveId uint32) error {
 
 	txnSequences := make(map[int64][]entryhint, 1<<10)
 
+	var i int
 	// iterate over immutable files and merge redundant entries
 	for {
 		rawData, pos, err := it.NextData()
@@ -283,8 +285,10 @@ func (op *mergeOP) doMerge(lastActiveId uint32) error {
 			if errors.Is(err, io.EOF) {
 				break
 			}
+			fmt.Printf("%d, %+v\n", i, pos)
 			return err
 		}
+		i++
 
 		// unmarshal the raw data
 		record, err := db.serializer.UnMarshalEntry(rawData)
@@ -322,6 +326,11 @@ func (op *mergeOP) doMerge(lastActiveId uint32) error {
 			// release mem
 			txnSequences[record.TxId] = nil
 		}
+	}
+
+	// manual sync
+	if err = op.merged.Sync(); err != nil {
+		return err
 	}
 
 	// record of the last data fid before merge. By using this fid
