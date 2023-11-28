@@ -194,6 +194,50 @@ func TestDB_Put_Get_2(t *testing.T) {
 	}
 }
 
+func TestDB_Put_Get_Fragment(t *testing.T) {
+	opt := DefaultOptions
+	opt.MaxSize = file.MB
+	opt.BlockCache = 0
+	opt.FsyncThreshold = 100 * file.KB
+
+	db, closeDB, err := testDB(opt)
+	assert.Nil(t, err)
+	defer func() {
+		err := closeDB()
+		t.Log(err)
+		assert.Nil(t, err)
+	}()
+
+	type record struct {
+		k   []byte
+		v   []byte
+		ttl time.Duration
+	}
+
+	// make sure key is unique
+	testkv := testRandKV()
+
+	var samples []record
+	for i := 0; i < 10000; i++ {
+		samples = append(samples, record{
+			k:   testkv.testUniqueBytes(100),
+			v:   testkv.testBytes(10 * file.KB),
+			ttl: 0,
+		})
+	}
+
+	for _, sample := range samples {
+		err := db.Put(sample.k, sample.v, sample.ttl)
+		assert.Nil(t, err)
+	}
+
+	for _, sample := range samples {
+		value, err := db.Get(sample.k)
+		assert.Nil(t, err)
+		assert.EqualValues(t, sample.v, value)
+	}
+}
+
 func TestDB_Del(t *testing.T) {
 	db, closeDB, err := testDB(DefaultOptions)
 	assert.Nil(t, err)
