@@ -7,8 +7,15 @@ import (
 
 // Backup use tar gzip to compress data wal files to dest path
 func (db *DB) Backup(destpath string) error {
+	if db.mask.CheckAny(closed) {
+		return ErrDBClosed
+	}
+
 	db.opmu.Lock()
 	defer db.opmu.Unlock()
+
+	db.mask.Store(backing)
+	defer db.mask.Remove(backing)
 
 	// check dir status
 	datadir := db.option.dataDir
@@ -41,8 +48,15 @@ func (db *DB) Backup(destpath string) error {
 // Recover recovers wal files from specified targz archive.
 // it will purge current data, and overwrite by the backup.
 func (db *DB) Recover(srcpath string) error {
+	if db.mask.CheckAny(closed) {
+		return ErrDBClosed
+	}
+
 	db.opmu.Lock()
 	defer db.opmu.Unlock()
+
+	db.mask.Store(recovering)
+	defer db.mask.Remove(recovering)
 
 	// check src path
 	if _, err := os.Stat(srcpath); err != nil {
@@ -56,11 +70,12 @@ func (db *DB) Recover(srcpath string) error {
 		return err
 	}
 
+	// remove all original data
 	if err := os.RemoveAll(db.option.dataDir); err != nil {
 		return err
 	}
 
-	// untar to db root dir
+	// recover backup data
 	if err := filebox.Unzip(srcpath, db.option.dataDir); err != nil {
 		return err
 	}

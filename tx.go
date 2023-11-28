@@ -273,19 +273,15 @@ type Txn struct {
 
 // Begin begins a new transaction
 func (db *DB) Begin(readonly bool) (*Txn, error) {
-	if db.flag&dbClosed != 0 {
+	if db.mask.CheckAny(closed) {
 		return nil, ErrDBClosed
-	}
-
-	if !readonly && db.flag&dbMerging != 0 {
-		return nil, ErrDBMerging
 	}
 
 	return db.tx.begin(db, readonly), nil
 }
 
 func (txn *Txn) Commit() error {
-	if txn.db.flag&dbClosed != 0 {
+	if txn.db.mask.CheckAny(closed) {
 		return ErrDBClosed
 	}
 
@@ -297,7 +293,7 @@ func (txn *Txn) Commit() error {
 }
 
 func (txn *Txn) RollBack() error {
-	if txn.db.flag&dbClosed != 0 {
+	if txn.db.mask.CheckAny(closed) {
 		return ErrDBClosed
 	}
 

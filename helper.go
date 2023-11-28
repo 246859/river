@@ -26,3 +26,36 @@ func memHash(data []byte) uint64 {
 func isExpiredOrDeleted(en entry.Entry) bool {
 	return entry.IsExpired(en.TTL) || en.Type != entry.DataEntryType
 }
+
+// Mask 32-bit mask is used to store different status information
+type Mask uint32
+
+func (m *Mask) Store(ms ...uint32) {
+	for _, mask := range ms {
+		*m |= Mask(mask)
+	}
+}
+
+func (m *Mask) Remove(ms ...uint32) {
+	for _, mask := range ms {
+		*m ^= Mask(mask)
+	}
+}
+
+func (m *Mask) CheckAny(ms ...uint32) bool {
+	for _, mask := range ms {
+		if *m&Mask(mask) != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Mask) CheckSome(ms ...uint32) bool {
+	for _, mask := range ms {
+		if *m&Mask(mask) == 0 {
+			return false
+		}
+	}
+	return true
+}

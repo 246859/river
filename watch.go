@@ -25,6 +25,10 @@ var (
 )
 
 func (db *DB) Watch() (<-chan *Event, error) {
+	if db.mask.CheckAny(closed) {
+		return nil, ErrDBClosed
+	}
+
 	if db.watcher == nil {
 		return nil, ErrWatcherDisabled
 	}
@@ -90,4 +94,10 @@ watch:
 			}
 		}
 	}
+}
+
+func (w *watcher) close() {
+	w.events = nil
+	close(w.eventCh)
+	w.eventCh = nil
 }

@@ -19,7 +19,6 @@ var (
 	ErrKeyNotFound    = errors.New("key not found")
 	ErrNilKey         = entry.ErrNilKey
 	ErrDBClosed       = errors.New("db is already closed")
-	ErrDBMerging      = errors.New("db is merging data")
 	ErrDirAlreadyUsed = errors.New("dir already used by another process")
 )
 
@@ -96,10 +95,10 @@ func OpenWithCtx(ctx context.Context, options Options, opts ...Option) (*DB, err
 }
 
 const (
-	// db is merging data
-	dbMerging uint8 = 1 << iota
-	// db is already closed
-	dbClosed
+	backing uint32 = 1 << iota
+	recovering
+	merging
+	closed
 )
 
 // DB represents a db instance, which stores wal file in a specific data directory
@@ -124,8 +123,7 @@ type DB struct {
 	// transaction manager
 	tx *tx
 
-	// db status flag
-	flag uint8
+	mask Mask
 
 	mu sync.Mutex
 	// db file lock
@@ -339,7 +337,7 @@ func (db *DB) Purge() error {
 
 // Sync syncs written buffer to disk
 func (db *DB) Sync() error {
-	if db.flag&dbClosed != 0 {
+	if db.mask.CheckAny(closed) {
 		return ErrDBClosed
 	}
 
@@ -371,7 +369,7 @@ func (db *DB) closeWal() error {
 // Close closes db
 // Once the db is closed, it can no longer be used
 func (db *DB) Close() error {
-	if db.flag&dbClosed != 0 {
+	if db.mask.CheckAny(closed) {
 		return ErrDBClosed
 	}
 
@@ -387,14 +385,16 @@ func (db *DB) Close() error {
 		return err
 	}
 
+	db.watcher.close()
+
 	// release dir lock
 	if err := db.unlockDir(); err != nil {
 		return err
 	}
 
+	db.cancel()
 	// discard db
 	db.discard()
-	db.cancel()
 
 	// manually gc
 	if db.option.ClosedGc {
@@ -405,9 +405,6 @@ func (db *DB) Close() error {
 }
 
 func (db *DB) lockDir() error {
-	if db.flag&dbClosed != 0 {
-		return ErrDBClosed
-	}
 
 	if db.fu == nil {
 		lockpath := db.option.filelock
@@ -434,9 +431,6 @@ func (db *DB) lockDir() error {
 }
 
 func (db *DB) unlockDir() error {
-	if db.flag&dbClosed != 0 {
-		return ErrDBClosed
-	}
 
 	if err := db.fu.Unlock(); err != nil {
 		return err
@@ -452,9 +446,16 @@ func (db *DB) unlockDir() error {
 // discard db fields for convenient to gc
 // must be called in lock
 func (db *DB) discard() {
-	db.flag |= dbClosed
+	db.mask.Store(closed)
+
+	db.ctx = nil
+	db.cancel = nil
 	db.data = nil
+	db.hint = nil
+	db.finish = nil
 	db.index = nil
+	db.watcher = nil
+	db.mergeOp = nil
 	db.tx = nil
 	db.fu = nil
 	db.serializer = nil
@@ -577,8 +578,7 @@ func (db *DB) loadIndex() error {
 	}
 
 	// we can skip the file before lastFid, their index maybe load from hint
-	err = db.loadIndexFromData(minFid, maxFid)
-	if err != nil {
+	if err := db.loadIndexFromData(minFid, maxFid); err != nil {
 		return err
 	}
 
