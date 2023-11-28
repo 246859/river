@@ -41,23 +41,34 @@ type Event struct {
 	Value any
 }
 
-func newWatcher(maxsize int, expected ...EventType) *watcher {
-	return &watcher{
-		maxsize:  maxsize,
+func newWatcher(queueSize int, expected ...EventType) *watcher {
+	w := &watcher{
 		expected: expected,
-		events:   queues.NewArrayQueue[*Event](maxsize),
-		eventCh:  make(chan *Event, 200),
+		events:   queues.NewArrayQueue[*Event](queueSize),
 	}
+
+	eventsize := queueSize / 5
+	if eventsize <= 0 {
+		eventsize = 20
+	}
+	w.eventSize = eventsize
+	// chan buffer size a little greater than eventsize is to prevent to block watch goroutine if chan is full
+	w.eventCh = make(chan *Event, w.eventSize+5)
+
+	return w
 }
 
 // watcher has the responsibility of maintaining events queue and channel
 // it will send events while the behavior of database is changed
 type watcher struct {
-	maxsize  int
-	expected []EventType
-	events   *queues.ArrayQueue[*Event]
-	eventCh  chan *Event
-	mu       sync.Mutex
+	expected  []EventType
+	queueSize int
+	events    *queues.ArrayQueue[*Event]
+
+	eventSize int
+	eventCh   chan *Event
+
+	mu sync.Mutex
 }
 
 func (w *watcher) expect(et EventType) bool {
@@ -74,8 +85,8 @@ func (w *watcher) pop() *Event {
 func (w *watcher) push(eve *Event) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.events.Size() >= w.maxsize {
-		return
+	if w.events.Size() >= w.queueSize {
+		w.events.Pop()
 	}
 	if !w.expect(eve.Type) {
 		return
@@ -90,14 +101,23 @@ func (w *watcher) clear() {
 }
 
 func (w *watcher) watch(ctx context.Context) {
-watch:
+	defer close(w.eventCh)
+
 	for {
 		select {
 		case <-ctx.Done():
-			break watch
+			return
 		default:
-			event := w.pop()
-			if event != nil {
+
+			// if channel will be full soon, consume event in channel by self
+			for len(w.eventCh) >= w.eventSize {
+				_, ok := <-w.eventCh
+				if !ok {
+					return
+				}
+			}
+
+			if event := w.pop(); event != nil {
 				w.eventCh <- event
 			} else {
 				time.Sleep(5 * time.Millisecond)
@@ -107,7 +127,7 @@ watch:
 }
 
 func (w *watcher) close() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.events = nil
-	close(w.eventCh)
-	w.eventCh = nil
 }
