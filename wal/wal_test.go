@@ -232,9 +232,6 @@ func TestWal_Iterator(t *testing.T) {
 				assert.Nil(t, err)
 			}
 
-			t.Log(it.IndexFid())
-			t.Log(it.IndexPos())
-
 			assert.EqualValues(t, datas[i], data)
 			assert.EqualValues(t, chunkPos[i].Block, pos.Block)
 			assert.EqualValues(t, chunkPos[i].Offset, pos.Offset)

@@ -1,9 +1,9 @@
 package riverdb
 
 import (
-	"fmt"
 	"github.com/246859/river/file"
 	"github.com/stretchr/testify/assert"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -79,14 +79,12 @@ func testDB_Merge(t *testing.T) {
 
 	err = db.Merge(true)
 	assert.Nil(t, err)
-	fmt.Println("merge")
 
 	for _, sample := range validSamples {
 		value, err := db.Get(sample.k)
 		assert.Nil(t, err)
 		assert.EqualValues(t, value, sample.v)
 	}
-	fmt.Println("final")
 }
 
 func TestDB_Merge_1(t *testing.T) {
@@ -166,7 +164,7 @@ func TestDB_Merge_2(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		t.Log("backing")
-		err := db.Backup(filepath.Join(db.option.Dir, "data.zip"))
+		err := db.Backup(filepath.Join(os.TempDir(), "data.zip"))
 		assert.Nil(t, err)
 	}()
 
