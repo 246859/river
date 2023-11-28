@@ -8,3 +8,5 @@ test:
 
 build:
 	go build -v --trimpath ./...
+
+.PHONY:	test, build
