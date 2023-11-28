@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -235,6 +236,56 @@ func TestDB_Put_Get_Fragment(t *testing.T) {
 		value, err := db.Get(sample.k)
 		assert.Nil(t, err)
 		assert.EqualValues(t, sample.v, value)
+	}
+}
+
+func TestDB_Put_Concurrent(t *testing.T) {
+	db, closeDB, err := testDB(DefaultOptions)
+	assert.Nil(t, err)
+	defer func() {
+		err := closeDB()
+		assert.Nil(t, err)
+	}()
+
+	type record struct {
+		k   []byte
+		v   []byte
+		ttl time.Duration
+	}
+
+	// make sure key is unique
+	testkv := testRandKV()
+
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	var records []record
+	wg.Add(200)
+
+	for i := 0; i < 200; i++ {
+		go func() {
+			defer wg.Done()
+			r := record{
+				k:   testkv.testUniqueBytes(20),
+				v:   testkv.testBytes(file.KB * 10),
+				ttl: 0,
+			}
+			err := db.Put(r.k, r.v, r.ttl)
+			assert.Nil(t, err)
+
+			mu.Lock()
+			records = append(records, r)
+			mu.Unlock()
+		}()
+	}
+
+	wg.Wait()
+
+	assert.Equal(t, 200, db.index.Size())
+
+	for _, r := range records {
+		value, err := db.Get(r.k)
+		assert.Nil(t, err)
+		assert.EqualValues(t, value, r.v)
 	}
 }
 
