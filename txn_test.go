@@ -28,7 +28,7 @@ func TestTxnHeap(t *testing.T) {
 }
 
 func TestTxn_Begin_Commit(t *testing.T) {
-	db, closeDB, err := testDB(t, DefaultOptions)
+	db, closeDB, err := testDB(t.Name(), DefaultOptions)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()
@@ -46,7 +46,7 @@ func TestTxn_Begin_Commit(t *testing.T) {
 }
 
 func TestTxn_Begin_RollBack(t *testing.T) {
-	db, closeDB, err := testDB(t, DefaultOptions)
+	db, closeDB, err := testDB(t.Name(), DefaultOptions)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()
@@ -64,7 +64,7 @@ func TestTxn_Begin_RollBack(t *testing.T) {
 }
 
 func TestTxn_Put_Get(t *testing.T) {
-	db, closeDB, err := testDB(t, DefaultOptions)
+	db, closeDB, err := testDB(t.Name(), DefaultOptions)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()
@@ -125,7 +125,7 @@ func TestTxn_Put_Get(t *testing.T) {
 	}
 }
 func TestTxn_Readonly_1(t *testing.T) {
-	db, closeDB, err := testDB(t, DefaultOptions)
+	db, closeDB, err := testDB(t.Name(), DefaultOptions)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()
@@ -140,7 +140,7 @@ func TestTxn_Readonly_1(t *testing.T) {
 }
 
 func TestTxn_Readonly_2(t *testing.T) {
-	db, closeDB, err := testDB(t, DefaultOptions)
+	db, closeDB, err := testDB(t.Name(), DefaultOptions)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()
@@ -191,7 +191,7 @@ func TestTxn_Readonly_2(t *testing.T) {
 }
 
 func TestTxn_UpdateOnly(t *testing.T) {
-	db, closeDB, err := testDB(t, DefaultOptions)
+	db, closeDB, err := testDB(t.Name(), DefaultOptions)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()
@@ -247,7 +247,7 @@ func TestTxn_UpdateOnly(t *testing.T) {
 }
 
 func TestTxn_Mixed(t *testing.T) {
-	db, closeDB, err := testDB(t, DefaultOptions)
+	db, closeDB, err := testDB(t.Name(), DefaultOptions)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()

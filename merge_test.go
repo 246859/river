@@ -11,7 +11,7 @@ import (
 )
 
 func TestDB_Merge_0(t *testing.T) {
-	db, closeDB, err := testDB(t, DefaultOptions)
+	db, closeDB, err := testDB(t.Name(), DefaultOptions)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()
@@ -28,7 +28,7 @@ func testDB_Merge(t *testing.T) {
 	opt.BlockCache = 0
 	opt.FsyncThreshold = 100 * types.KB
 
-	db, closeDB, err := testDB(t, opt)
+	db, closeDB, err := testDB(t.Name(), opt)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()
@@ -96,7 +96,7 @@ func TestDB_Merge_1(t *testing.T) {
 }
 
 func TestDB_Merge_2(t *testing.T) {
-	db, closeDB, err := testDB(t, DefaultOptions)
+	db, closeDB, err := testDB(t.Name(), DefaultOptions)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()

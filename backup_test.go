@@ -8,7 +8,7 @@ import (
 )
 
 func TestDB_Backup(t *testing.T) {
-	db, closeDB, err := testDB(t, DefaultOptions)
+	db, closeDB, err := testDB(t.Name(), DefaultOptions)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()
@@ -23,7 +23,7 @@ func TestDB_Backup(t *testing.T) {
 }
 
 func TestDB_Recover(t *testing.T) {
-	db, closeDB, err := testDB(t, DefaultOptions)
+	db, closeDB, err := testDB(t.Name(), DefaultOptions)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()

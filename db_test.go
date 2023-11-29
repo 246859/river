@@ -14,7 +14,7 @@ import (
 func TestDB_Open(t *testing.T) {
 	// default open
 	{
-		_, closeDB, err := testDB(t, DefaultOptions)
+		_, closeDB, err := testDB(t.Name(), DefaultOptions)
 		assert.Nil(t, err)
 		assert.Nil(t, closeDB())
 	}
@@ -75,7 +75,7 @@ func TestDB_Open(t *testing.T) {
 }
 
 func TestDB_Put_Get_1(t *testing.T) {
-	db, closeDB, err := testDB(t, DefaultOptions)
+	db, closeDB, err := testDB(t.Name(), DefaultOptions)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()
@@ -106,7 +106,7 @@ func TestDB_Put_Get_1(t *testing.T) {
 }
 
 func TestDB_Put_Get_2(t *testing.T) {
-	db, closeDB, err := testDB(t, DefaultOptions)
+	db, closeDB, err := testDB(t.Name(), DefaultOptions)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()
@@ -201,7 +201,7 @@ func TestDB_Put_Get_Fragment(t *testing.T) {
 	opt.BlockCache = 0
 	opt.FsyncThreshold = 100 * types.KB
 
-	db, closeDB, err := testDB(t, opt)
+	db, closeDB, err := testDB(t.Name(), opt)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()
@@ -240,7 +240,7 @@ func TestDB_Put_Get_Fragment(t *testing.T) {
 }
 
 func TestDB_Put_Concurrent(t *testing.T) {
-	db, closeDB, err := testDB(t, DefaultOptions)
+	db, closeDB, err := testDB(t.Name(), DefaultOptions)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()
@@ -290,7 +290,7 @@ func TestDB_Put_Concurrent(t *testing.T) {
 }
 
 func TestDB_Del(t *testing.T) {
-	db, closeDB, err := testDB(t, DefaultOptions)
+	db, closeDB, err := testDB(t.Name(), DefaultOptions)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()
@@ -342,7 +342,7 @@ func TestDB_Del(t *testing.T) {
 }
 
 func TestDB_TTL(t *testing.T) {
-	db, closeDB, err := testDB(t, DefaultOptions)
+	db, closeDB, err := testDB(t.Name(), DefaultOptions)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()
@@ -396,7 +396,7 @@ func TestDB_TTL(t *testing.T) {
 }
 
 func TestDB_Expire(t *testing.T) {
-	db, closeDB, err := testDB(t, DefaultOptions)
+	db, closeDB, err := testDB(t.Name(), DefaultOptions)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()
@@ -493,7 +493,7 @@ func TestDB_Expire(t *testing.T) {
 }
 
 func TestDB_Range(t *testing.T) {
-	db, closeDB, err := testDB(t, DefaultOptions)
+	db, closeDB, err := testDB(t.Name(), DefaultOptions)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()

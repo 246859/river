@@ -7,17 +7,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"testing"
 )
 
 // testDB return a test db for testing
-func testDB(t *testing.T, option Options) (db *DB, closeDB func() error, err error) {
+func testDB(name string, option Options) (db *DB, closeDB func() error, err error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	dir := filepath.Join(homeDir, fmt.Sprintf("%s_%s", strings.ToLower(t.Name()), string(testRandKV().testUniqueBytes(10))))
+	dir := filepath.Join(homeDir, fmt.Sprintf("%s_%s", strings.ToLower(name), string(testRandKV().testUniqueBytes(10))))
 	err = os.MkdirAll(dir, 0777)
 	if err != nil {
 		return nil, nil, err
