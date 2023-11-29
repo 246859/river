@@ -638,12 +638,18 @@ func (t txnPriorityHeap) push(x *Txn) {
 }
 
 func (t txnPriorityHeap) peek() *Txn {
+	if t.len() == 0 {
+		return nil
+	}
 	txn := t.pop()
 	t.push(txn)
 	return txn
 }
 
 func (t txnPriorityHeap) pop() *Txn {
+	if t.len() == 0 {
+		return nil
+	}
 	return heap.Pop(t.theap).(*Txn)
 }
 
