@@ -18,7 +18,8 @@ func TestDB_Backup(t *testing.T) {
 	err = db.Put([]byte("hello world!"), []byte("hahahah"), 0)
 	assert.Nil(t, err)
 
-	err = db.Backup(filepath.Join(os.TempDir(), "now.zip"))
+	err = db.Backup(filepath.Join(os.TempDir(), "test.tar.gz"))
+	t.Log(err)
 	assert.Nil(t, err)
 }
 
@@ -30,7 +31,7 @@ func TestDB_Recover(t *testing.T) {
 		assert.Nil(t, err)
 	}()
 
-	err = db.Recover(filepath.Join(os.TempDir(), "now.zip"))
+	err = db.Recover(filepath.Join(os.TempDir(), "test.tar.gz"))
 	t.Log(err)
 	assert.Nil(t, err)
 

@@ -164,7 +164,7 @@ func TestDB_Merge_2(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		t.Log("backing")
-		err := db.Backup(filepath.Join(os.TempDir(), "data.zip"))
+		err := db.Backup(filepath.Join(os.TempDir(), "test.tar.gz"))
 		assert.Nil(t, err)
 	}()
 
