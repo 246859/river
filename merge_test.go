@@ -1,7 +1,7 @@
 package riverdb
 
 import (
-	"github.com/246859/river/file"
+	"github.com/246859/river/types"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
@@ -24,9 +24,9 @@ func TestDB_Merge_0(t *testing.T) {
 
 func testDB_Merge(t *testing.T) {
 	opt := DefaultOptions
-	opt.MaxSize = file.MB
+	opt.MaxSize = types.MB
 	opt.BlockCache = 0
-	opt.FsyncThreshold = 100 * file.KB
+	opt.FsyncThreshold = 100 * types.KB
 
 	db, closeDB, err := testDB(t, opt)
 	assert.Nil(t, err)
@@ -47,7 +47,7 @@ func testDB_Merge(t *testing.T) {
 	for i := 0; i < 300; i++ {
 		redundantSamples = append(redundantSamples, record{
 			k:   testkv.testUniqueBytes(100),
-			v:   testkv.testBytes(10 * file.KB),
+			v:   testkv.testBytes(10 * types.KB),
 			ttl: 0,
 		})
 	}
@@ -67,7 +67,7 @@ func testDB_Merge(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		validSamples = append(validSamples, record{
 			k:   testkv.testUniqueBytes(100),
-			v:   testkv.testBytes(10 * file.KB),
+			v:   testkv.testBytes(10 * types.KB),
 			ttl: 0,
 		})
 	}
@@ -115,7 +115,7 @@ func TestDB_Merge_2(t *testing.T) {
 	for i := 0; i < 300; i++ {
 		samples = append(samples, record{
 			k:   testkv.testUniqueBytes(100),
-			v:   testkv.testBytes(10 * file.KB),
+			v:   testkv.testBytes(10 * types.KB),
 			ttl: 0,
 		})
 	}
@@ -145,7 +145,7 @@ func TestDB_Merge_2(t *testing.T) {
 			for i := 0; i < 100; i++ {
 				samples1 = append(samples1, record{
 					k:   testkv.testUniqueBytes(100),
-					v:   testkv.testBytes(10 * file.KB),
+					v:   testkv.testBytes(10 * types.KB),
 					ttl: 0,
 				})
 			}

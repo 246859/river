@@ -2,7 +2,7 @@ package wal
 
 import (
 	"fmt"
-	"github.com/246859/river/file"
+	"github.com/246859/river/types"
 	"github.com/google/btree"
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/pkg/errors"
@@ -53,7 +53,7 @@ func reviseOpt(opt Option) (Option, error) {
 func defaultOption() Option {
 	return Option{
 		DataDir:        path.Join(os.TempDir(), DefaultWalSuffix),
-		MaxFileSize:    file.MB * 768,
+		MaxFileSize:    types.MB * 768,
 		Ext:            DefaultWalSuffix,
 		BlockCache:     20,
 		FsyncPerWrite:  true,

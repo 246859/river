@@ -1,7 +1,7 @@
 package riverdb
 
 import (
-	"github.com/246859/river/file"
+	"github.com/246859/river/types"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
@@ -29,7 +29,7 @@ func TestDB_Watch_Mixed(t *testing.T) {
 	for i := 0; i < 300; i++ {
 		samples = append(samples, record{
 			k:   testkv.testUniqueBytes(100),
-			v:   testkv.testBytes(10 * file.KB),
+			v:   testkv.testBytes(10 * types.KB),
 			ttl: 0,
 		})
 	}

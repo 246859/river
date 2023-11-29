@@ -2,7 +2,7 @@ package riverdb
 
 import (
 	"github.com/246859/river/entry"
-	"github.com/246859/river/file"
+	"github.com/246859/river/types"
 	"github.com/stretchr/testify/assert"
 	"slices"
 	"strings"
@@ -89,8 +89,8 @@ func TestDB_Put_Get_1(t *testing.T) {
 	}{
 		{[]byte("key"), []byte("value"), 0},
 		{[]byte("key1"), []byte("value1"), -1},
-		{[]byte("key2"), []byte(strings.Repeat("a", file.KB)), -1},
-		{[]byte(strings.Repeat("a", 10000)), []byte(strings.Repeat("a", file.KB)), -1},
+		{[]byte("key2"), []byte(strings.Repeat("a", types.KB)), -1},
+		{[]byte(strings.Repeat("a", 10000)), []byte(strings.Repeat("a", types.KB)), -1},
 	}
 
 	for _, sample := range samples {
@@ -197,9 +197,9 @@ func TestDB_Put_Get_2(t *testing.T) {
 
 func TestDB_Put_Get_Fragment(t *testing.T) {
 	opt := DefaultOptions
-	opt.MaxSize = file.MB
+	opt.MaxSize = types.MB
 	opt.BlockCache = 0
-	opt.FsyncThreshold = 100 * file.KB
+	opt.FsyncThreshold = 100 * types.KB
 
 	db, closeDB, err := testDB(t, opt)
 	assert.Nil(t, err)
@@ -222,7 +222,7 @@ func TestDB_Put_Get_Fragment(t *testing.T) {
 	for i := 0; i < 10000; i++ {
 		samples = append(samples, record{
 			k:   testkv.testUniqueBytes(100),
-			v:   testkv.testBytes(10 * file.KB),
+			v:   testkv.testBytes(10 * types.KB),
 			ttl: 0,
 		})
 	}
@@ -266,7 +266,7 @@ func TestDB_Put_Concurrent(t *testing.T) {
 			defer wg.Done()
 			r := record{
 				k:   testkv.testUniqueBytes(20),
-				v:   testkv.testBytes(file.KB * 10),
+				v:   testkv.testBytes(types.KB * 10),
 				ttl: 0,
 			}
 			err := db.Put(r.k, r.v, r.ttl)
@@ -507,13 +507,13 @@ func TestDB_Range(t *testing.T) {
 	}{
 		{[]byte("key"), []byte("value"), 0},
 		{[]byte("key1"), []byte("value1"), -1},
-		{[]byte("key2"), []byte(strings.Repeat("a", file.KB)), -1},
-		{[]byte("key3"), []byte(strings.Repeat("a", file.KB)), -1},
-		{[]byte("key4"), []byte(strings.Repeat("a", file.KB)), -1},
-		{[]byte("key5"), []byte(strings.Repeat("a", file.KB)), -1},
-		{[]byte("key6"), []byte(strings.Repeat("a", file.KB)), -1},
-		{[]byte("key7"), []byte(strings.Repeat("a", file.KB)), -1},
-		{[]byte(strings.Repeat("a", 10000)), []byte(strings.Repeat("a", file.KB)), -1},
+		{[]byte("key2"), []byte(strings.Repeat("a", types.KB)), -1},
+		{[]byte("key3"), []byte(strings.Repeat("a", types.KB)), -1},
+		{[]byte("key4"), []byte(strings.Repeat("a", types.KB)), -1},
+		{[]byte("key5"), []byte(strings.Repeat("a", types.KB)), -1},
+		{[]byte("key6"), []byte(strings.Repeat("a", types.KB)), -1},
+		{[]byte("key7"), []byte(strings.Repeat("a", types.KB)), -1},
+		{[]byte(strings.Repeat("a", 10000)), []byte(strings.Repeat("a", types.KB)), -1},
 	}
 
 	for _, sample := range samples {

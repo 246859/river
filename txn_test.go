@@ -1,7 +1,7 @@
 package riverdb
 
 import (
-	"github.com/246859/river/file"
+	"github.com/246859/river/types"
 	"github.com/stretchr/testify/assert"
 	"sync"
 	"testing"
@@ -77,7 +77,7 @@ func TestTxn_Put_Get(t *testing.T) {
 		txn, err := db.Begin(false)
 		assert.Nil(t, err)
 
-		k, v := testkv.testUniqueBytes(10), testkv.testBytes(file.KB)
+		k, v := testkv.testUniqueBytes(10), testkv.testBytes(types.KB)
 
 		err = txn.Put(k, v, 0)
 		assert.Nil(t, err)
@@ -103,7 +103,7 @@ func TestTxn_Put_Get(t *testing.T) {
 		txn, err := db.Begin(false)
 		assert.Nil(t, err)
 
-		k, v := testkv.testUniqueBytes(10), testkv.testBytes(file.KB)
+		k, v := testkv.testUniqueBytes(10), testkv.testBytes(types.KB)
 
 		err = txn.Put(k, v, 0)
 		assert.Nil(t, err)
@@ -159,7 +159,7 @@ func TestTxn_Readonly_2(t *testing.T) {
 	for i := 0; i < 300; i++ {
 		samples = append(samples, record{
 			k:   testkv.testUniqueBytes(100),
-			v:   testkv.testBytes(10 * file.KB),
+			v:   testkv.testBytes(10 * types.KB),
 			ttl: 0,
 		})
 	}
@@ -219,7 +219,7 @@ func TestTxn_UpdateOnly(t *testing.T) {
 			for i := 0; i < 10; i++ {
 				rs = append(rs, record{
 					k:   testkv.testUniqueBytes(20),
-					v:   testkv.testBytes(file.KB * 10),
+					v:   testkv.testBytes(types.KB * 10),
 					ttl: 0,
 				})
 			}
@@ -266,7 +266,7 @@ func TestTxn_Mixed(t *testing.T) {
 	for i := 0; i < 300; i++ {
 		samples = append(samples, record{
 			k:   testkv.testUniqueBytes(100),
-			v:   testkv.testBytes(10 * file.KB),
+			v:   testkv.testBytes(10 * types.KB),
 			ttl: 0,
 		})
 	}

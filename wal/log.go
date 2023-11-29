@@ -3,8 +3,8 @@ package wal
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/246859/river/file"
 	"github.com/246859/river/pkg/crc"
+	"github.com/246859/river/types"
 	"github.com/pkg/errors"
 	"github.com/valyala/bytebufferpool"
 	"io"
@@ -35,7 +35,7 @@ const (
 // +-----------+--------------+------------+------------+
 const ChunkHeaderSize = 7
 
-const MaxBlockSize = 32 * file.KB
+const MaxBlockSize = 32 * types.KB
 
 type ChunkHeader struct {
 	crc       uint32
@@ -99,7 +99,7 @@ func newChunkHeader() any {
 
 // open a new log file
 func openLogFile(dir, ext string, fid uint32, cache *lruCache, bufferPool *bytebufferpool.Pool) (*LogFile, error) {
-	fd, err := file.OpenStdFile(WalFileName(dir, fid, ext), os.O_CREATE|os.O_APPEND|os.O_RDWR, 0644)
+	fd, err := os.OpenFile(WalFileName(dir, fid, ext), os.O_CREATE|os.O_APPEND|os.O_RDWR, 0644)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +124,7 @@ func openLogFile(dir, ext string, fid uint32, cache *lruCache, bufferPool *byteb
 
 type LogFile struct {
 	fid uint32
-	fd  file.IO
+	fd  *os.File
 
 	crc crc.Crc32
 

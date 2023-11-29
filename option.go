@@ -2,8 +2,8 @@ package riverdb
 
 import (
 	"fmt"
-	"github.com/246859/river/file"
 	"github.com/246859/river/index"
+	"github.com/246859/river/types"
 	"github.com/246859/river/wal"
 	"path/filepath"
 )
@@ -16,15 +16,15 @@ const (
 	lockName     = "river"
 )
 
-const defaultMaxFileSize = file.MB * 256
+const defaultMaxFileSize = types.MB * 256
 
 const blockSize = wal.MaxBlockSize
 
 var DefaultOptions = Options{
 	MaxSize:        defaultMaxFileSize,
-	BlockCache:     defaultMaxFileSize / file.MB,
+	BlockCache:     defaultMaxFileSize / types.MB,
 	Fsync:          false,
-	FsyncThreshold: blockSize * (defaultMaxFileSize / file.MB),
+	FsyncThreshold: blockSize * (defaultMaxFileSize / types.MB),
 	Compare:        index.DefaultCompare,
 	WatchSize:      2000,
 	WatchEvents:    []EventType{PutEvent, DelEvent},

@@ -3,7 +3,6 @@ package riverdb
 import (
 	"context"
 	"github.com/246859/river/entry"
-	"github.com/246859/river/file"
 	"github.com/246859/river/index"
 	"github.com/246859/river/wal"
 	"github.com/gofrs/flock"
@@ -408,7 +407,7 @@ func (db *DB) lockDir() error {
 
 	if db.fu == nil {
 		lockpath := db.option.filelock
-		fl, err := file.OpenStdFile(lockpath, os.O_CREATE, 0644)
+		fl, err := os.OpenFile(lockpath, os.O_CREATE, 0644)
 		if err != nil {
 			return err
 		}

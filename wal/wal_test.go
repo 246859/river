@@ -1,7 +1,7 @@
 package wal
 
 import (
-	"github.com/246859/river/file"
+	"github.com/246859/river/types"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"io"
@@ -14,7 +14,7 @@ import (
 var test_option = Option{
 	DataDir: path.Join(os.TempDir(), DefaultWalSuffix),
 	// max file 5 MB
-	MaxFileSize:    file.MB * 5,
+	MaxFileSize:    types.MB * 5,
 	Ext:            DefaultWalSuffix,
 	BlockCache:     5,
 	FsyncPerWrite:  true,
@@ -104,12 +104,12 @@ func TestWal_Write_ManyFiles(t *testing.T) {
 	wal := tempWal(test_option)
 	defer clean(wal)
 
-	data1 := []byte(strings.Repeat("a", file.MB*2))
+	data1 := []byte(strings.Repeat("a", types.MB*2))
 	pos1, err := wal.Write(data1)
 	assert.Nil(t, err)
 	assert.Greater(t, pos1.Size, int64(0))
 
-	data2 := []byte(strings.Repeat("a", file.MB*4))
+	data2 := []byte(strings.Repeat("a", types.MB*4))
 	pos2, err := wal.Write(data2)
 	assert.Nil(t, err)
 	assert.NotEqualValues(t, pos1.Fid, pos2.Fid)
@@ -124,7 +124,7 @@ func TestWal_Write_ManyFiles(t *testing.T) {
 
 	// write exceed data
 	// 6 Mb > max file size
-	data3 := []byte(strings.Repeat("a", file.MB*6))
+	data3 := []byte(strings.Repeat("a", types.MB*6))
 	pos, err := wal.Write(data3)
 	assert.ErrorIs(t, err, ErrDataExceedFile)
 	assert.EqualValues(t, 0, pos.Fid)
@@ -135,11 +135,11 @@ func TestWal_PendingWrite(t *testing.T) {
 	defer clean(wal)
 
 	datas := [][]byte{
-		[]byte(strings.Repeat("a", file.KB)),
-		[]byte(strings.Repeat("a", file.KB*2)),
-		[]byte(strings.Repeat("a", file.KB*3)),
-		[]byte(strings.Repeat("a", file.KB*4)),
-		[]byte(strings.Repeat("a", file.KB*5)),
+		[]byte(strings.Repeat("a", types.KB)),
+		[]byte(strings.Repeat("a", types.KB*2)),
+		[]byte(strings.Repeat("a", types.KB*3)),
+		[]byte(strings.Repeat("a", types.KB*4)),
+		[]byte(strings.Repeat("a", types.KB*5)),
 	}
 
 	for _, data := range datas {
@@ -161,20 +161,20 @@ func TestWal_Iterator(t *testing.T) {
 	defer clean(wal)
 
 	datas := [][]byte{
-		[]byte(strings.Repeat("a", file.KB)),
-		[]byte(strings.Repeat("a", file.KB*200)),
-		[]byte(strings.Repeat("a", file.KB*300)),
-		[]byte(strings.Repeat("a", file.KB*400)),
-		[]byte(strings.Repeat("a", file.KB*500)),
-		[]byte(strings.Repeat("a", file.KB*600)),
-		[]byte(strings.Repeat("a", file.KB*700)),
-		[]byte(strings.Repeat("a", file.KB*800)),
-		[]byte(strings.Repeat("a", file.KB*900)),
-		[]byte(strings.Repeat("a", file.KB*1000)),
-		[]byte(strings.Repeat("a", file.KB*1100)),
-		[]byte(strings.Repeat("a", file.KB*1200)),
-		[]byte(strings.Repeat("a", file.KB*1300)),
-		[]byte(strings.Repeat("a", file.KB*1400)),
+		[]byte(strings.Repeat("a", types.KB)),
+		[]byte(strings.Repeat("a", types.KB*200)),
+		[]byte(strings.Repeat("a", types.KB*300)),
+		[]byte(strings.Repeat("a", types.KB*400)),
+		[]byte(strings.Repeat("a", types.KB*500)),
+		[]byte(strings.Repeat("a", types.KB*600)),
+		[]byte(strings.Repeat("a", types.KB*700)),
+		[]byte(strings.Repeat("a", types.KB*800)),
+		[]byte(strings.Repeat("a", types.KB*900)),
+		[]byte(strings.Repeat("a", types.KB*1000)),
+		[]byte(strings.Repeat("a", types.KB*1100)),
+		[]byte(strings.Repeat("a", types.KB*1200)),
+		[]byte(strings.Repeat("a", types.KB*1300)),
+		[]byte(strings.Repeat("a", types.KB*1400)),
 	}
 
 	var chunkPos []ChunkPos
