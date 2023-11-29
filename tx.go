@@ -2,8 +2,8 @@ package riverdb
 
 import (
 	"cmp"
-	"container/heap"
 	"encoding/binary"
+	"github.com/246859/containers/heaps"
 	"github.com/246859/river/entry"
 	"github.com/246859/river/index"
 	"github.com/246859/river/pkg/str"
@@ -12,6 +12,7 @@ import (
 	"github.com/google/btree"
 	"github.com/pkg/errors"
 	"regexp"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,8 +33,10 @@ func newTx() (*tx, error) {
 	}
 
 	tx := &tx{
-		node:      node,
-		active:    makeTxnPriorityHeap(),
+		node: node,
+		active: heaps.NewBinaryHeap[*Txn](200, func(a, b *Txn) int {
+			return cmp.Compare(a.startedTs, b.startedTs)
+		}),
 		committed: make([]*Txn, 0, 200),
 	}
 
@@ -52,7 +55,7 @@ type tx struct {
 	node *snowflake.Node
 
 	// record of active transactions
-	active txnPriorityHeap
+	active heaps.Heap[*Txn]
 	amu    sync.Mutex
 
 	// record of committed txn
@@ -95,9 +98,8 @@ func (tx *tx) hasConflict(txn *Txn) bool {
 // must be called in lock
 func (tx *tx) cleanCommitted() {
 	// the earliest active transaction
-	early := tx.active.peek()
-
-	if early != nil {
+	early, has := tx.active.Peek()
+	if has && early != nil {
 		// remove committed transaction whose commitTs less than or equal to the earliest startTs
 		tmp := tx.committed[:0]
 		for _, txn := range tx.committed {
@@ -115,7 +117,7 @@ func (tx *tx) begin(db *DB, readonly bool) *Txn {
 	txn.startedTs = tx.newTs()
 
 	tx.amu.Lock()
-	tx.active.push(txn)
+	tx.active.Push(txn)
 	tx.amu.Unlock()
 
 	return txn
@@ -124,7 +126,10 @@ func (tx *tx) begin(db *DB, readonly bool) *Txn {
 func (tx *tx) discardTxn(txn *Txn, fail bool) {
 	tx.amu.Lock()
 	// remove from active
-	tx.active.remove(txn)
+	i := slices.Index(tx.active.Values(), txn)
+	if i > -1 {
+		tx.active.Remove(i)
+	}
 	txn.discard(fail)
 	tx.amu.Unlock()
 }
@@ -587,77 +592,4 @@ func (p *btreePending) iterate(f func(item *entry.Entry) bool) {
 	p.tree.Ascend(func(item *entry.Entry) bool {
 		return f(item)
 	})
-}
-
-type txnHeap []*Txn
-
-func (t *txnHeap) Len() int {
-	return len(*t)
-}
-
-func (t *txnHeap) Less(i, j int) bool {
-	tt := *t
-	return cmp.Compare(tt[i].startedTs, tt[j].startedTs) < 0
-}
-
-func (t *txnHeap) Swap(i, j int) {
-	tt := *t
-	tt[i], tt[j] = tt[j], tt[i]
-}
-
-func (t *txnHeap) Push(x any) {
-	*t = append(*t, x.(*Txn))
-}
-
-func (t *txnHeap) Pop() any {
-	if t.Len() >= 1 {
-		last := (*t)[t.Len()-1]
-		*t = (*t)[:t.Len()-1]
-		return last
-	}
-	return nil
-}
-
-func makeTxnPriorityHeap() txnPriorityHeap {
-	s := make(txnHeap, 0, 256)
-	th := &s
-	heap.Init(th)
-	return txnPriorityHeap{theap: th}
-}
-
-type txnPriorityHeap struct {
-	theap *txnHeap
-}
-
-func (t txnPriorityHeap) len() int {
-	return t.theap.Len()
-}
-
-func (t txnPriorityHeap) push(x *Txn) {
-	heap.Push(t.theap, x)
-}
-
-func (t txnPriorityHeap) peek() *Txn {
-	if t.len() == 0 {
-		return nil
-	}
-	txn := t.pop()
-	t.push(txn)
-	return txn
-}
-
-func (t txnPriorityHeap) pop() *Txn {
-	if t.len() == 0 {
-		return nil
-	}
-	return heap.Pop(t.theap).(*Txn)
-}
-
-func (t txnPriorityHeap) remove(txn *Txn) {
-	for i, itxn := range *t.theap {
-		if itxn == txn {
-			heap.Remove(t.theap, i)
-			break
-		}
-	}
 }
