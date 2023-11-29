@@ -198,7 +198,7 @@ type Wal struct {
 	// pendingBytes holds the bytes pending to be written in batches
 	pendingBytes [][]byte
 
-	mutex        sync.Mutex
+	mutex        sync.RWMutex
 	pendingMutex sync.Mutex
 
 	option Option
@@ -206,8 +206,8 @@ type Wal struct {
 
 // Read reads data at the specified position
 func (w *Wal) Read(pos ChunkPos) ([]byte, error) {
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
+	w.mutex.RLock()
+	defer w.mutex.RUnlock()
 
 	var f File
 	if pos.Fid == w.active.Fid() {
@@ -343,8 +343,8 @@ func (w *Wal) rotate() error {
 // maxFid determines the file range for the iterator
 // pos determines the chunk position for the iterator
 func (w *Wal) Iterator(minFid, maxFid uint32, pos ChunkPos) (FileIterator, error) {
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
+	w.mutex.RLock()
+	defer w.mutex.RUnlock()
 
 	if maxFid <= 0 {
 		maxFid = w.active.Fid()
@@ -463,13 +463,16 @@ func (w *Wal) Purge() error {
 
 // IsEmpty check wal data if is empty
 func (w *Wal) IsEmpty() bool {
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
+	w.mutex.RLock()
+	defer w.mutex.RUnlock()
 	return w.active.Size() == 0 && w.immutables.Len() == 0
 }
 
 // ActiveFid returns current active file id
 func (w *Wal) ActiveFid() uint32 {
+	w.mutex.RLock()
+	defer w.mutex.RUnlock()
+
 	if w.active != nil {
 		return w.active.Fid()
 	}
