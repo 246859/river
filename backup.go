@@ -81,6 +81,11 @@ func (db *DB) Recover(srcpath string) error {
 		return err
 	}
 
+	// re mkdir
+	if err := os.MkdirAll(db.option.dataDir, os.ModePerm); err != nil {
+		return err
+	}
+
 	// recover backup data
 	if err := filebox.Unzip(srcpath, db.option.dataDir); err != nil {
 		return err
