@@ -143,7 +143,11 @@ func tarCompress(src, dest string) error {
 			return nil
 		}
 		header, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return err
+		}
 
+		header.Size = info.Size()
 		header.Name = strings.TrimPrefix(processPath(path), processPath(src))
 
 		if err := tarwriter.WriteHeader(header); err != nil {
@@ -154,6 +158,7 @@ func tarCompress(src, dest string) error {
 		if err != nil {
 			return err
 		}
+
 		defer srcfile.Close()
 
 		if _, err := io.Copy(tarwriter, srcfile); err != nil {
