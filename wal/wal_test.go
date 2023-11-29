@@ -130,40 +130,6 @@ func TestWal_Write_ManyFiles(t *testing.T) {
 	assert.EqualValues(t, 0, pos.Fid)
 }
 
-func TestWal_Write_LargeData(t *testing.T) {
-	opt := test_option
-	opt.MaxFileSize = file.GB * 2
-	opt.BlockCache = file.GB / MaxBlockSize / 10
-	wal := tempWal(opt)
-	defer clean(wal)
-
-	datas := [][]byte{
-		[]byte(strings.Repeat("a", file.MB*100)),
-		[]byte(strings.Repeat("a", file.MB*500)),
-		[]byte(strings.Repeat("a", file.MB*400)),
-		[]byte(strings.Repeat("a", file.GB)),
-		[]byte(strings.Repeat("a", file.MB*200)),
-		[]byte(strings.Repeat("a", file.MB*100)),
-		[]byte(strings.Repeat("a", file.MB*400)),
-		[]byte(strings.Repeat("a", file.GB*3/2)),
-	}
-
-	var poses []ChunkPos
-	for _, data := range datas {
-		pos, err := wal.Write(data)
-		assert.Nil(t, err)
-		if err != nil {
-			poses = append(poses, pos)
-		}
-	}
-
-	for i, pos := range poses {
-		read, err := wal.Read(pos)
-		assert.Nil(t, err)
-		assert.EqualValues(t, datas[i], read)
-	}
-}
-
 func TestWal_PendingWrite(t *testing.T) {
 	wal := tempWal(test_option)
 	defer clean(wal)

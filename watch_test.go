@@ -10,7 +10,7 @@ import (
 )
 
 func TestDB_Watch_Mixed(t *testing.T) {
-	db, closeDB, err := testDB(DefaultOptions)
+	db, closeDB, err := testDB(t, DefaultOptions)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()
@@ -67,7 +67,7 @@ func TestDB_Watch_Mixed(t *testing.T) {
 func TestDB_Watch_Backup(t *testing.T) {
 	opt := DefaultOptions
 	opt.WatchEvents = append(opt.WatchEvents, BackupEvent, RecoverEvent)
-	db, closeDB, err := testDB(opt)
+	db, closeDB, err := testDB(t, opt)
 	assert.Nil(t, err)
 	defer func() {
 		err := closeDB()
