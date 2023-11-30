@@ -370,6 +370,30 @@ func (w *Wal) Iterator(minFid, maxFid uint32, pos ChunkPos) (FileIterator, error
 	return newFileIteratorWithPos(fs, pos)
 }
 
+type Stat struct {
+	NumOfWal  int64
+	SizeOfWal int64
+}
+
+// Stat return a simple statistics of wal instance
+func (w *Wal) Stat() Stat {
+	w.mutex.RUnlock()
+	defer w.mutex.RUnlock()
+
+	var size int64
+	size += w.active.Size()
+
+	w.immutables.Ascend(func(item F) bool {
+		size += item.File.Size()
+		return false
+	})
+
+	return Stat{
+		NumOfWal:  int64(w.active.Fid()),
+		SizeOfWal: size,
+	}
+}
+
 func (w *Wal) sync(size int64, force bool) error {
 
 	// force sync
