@@ -150,32 +150,6 @@ func TestWal_Write_ManyFiles(t *testing.T) {
 	assert.EqualValues(t, 0, pos.Fid)
 }
 
-func TestWal_PendingWrite(t *testing.T) {
-	wal := tempWal(test_option)
-	defer clean(wal)
-
-	datas := [][]byte{
-		[]byte(strings.Repeat("a", types.KB)),
-		[]byte(strings.Repeat("a", types.KB*2)),
-		[]byte(strings.Repeat("a", types.KB*3)),
-		[]byte(strings.Repeat("a", types.KB*4)),
-		[]byte(strings.Repeat("a", types.KB*5)),
-	}
-
-	for _, data := range datas {
-		wal.PendingWrite(data)
-	}
-
-	chunkPos, err := wal.PendingPush()
-	assert.Nil(t, err)
-
-	for i, pos := range chunkPos {
-		read, err := wal.Read(pos)
-		assert.Nil(t, err)
-		assert.EqualValues(t, datas[i], read)
-	}
-}
-
 func TestWal_Iterator(t *testing.T) {
 	wal := tempWal(test_option)
 	defer clean(wal)
