@@ -249,6 +249,40 @@ func (w *Wal) Write(data []byte) (ChunkPos, error) {
 	return pos, nil
 }
 
+func (w *Wal) WriteAll(datas [][]byte, needSync bool) ([]ChunkPos, error) {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	var estimatesize int64
+	for _, data := range datas {
+		estimatesize += estimateBlockSize(int64(len(data)))
+	}
+
+	// data too large to hold in single wal file
+	if estimatesize > w.option.MaxFileSize {
+		return nil, ErrDataExceedFile
+	}
+
+	// active wal file has no left space to hold data, allocate a new file
+	if w.active.Size()+estimatesize > w.option.MaxFileSize {
+		if err := w.rotate(); err != nil {
+			return nil, err
+		}
+	}
+
+	all, err := w.active.WriteAll(datas)
+	if err != nil {
+		return nil, err
+	}
+
+	// decide if sync data to disk
+	if err := w.sync(estimatesize, needSync); err != nil {
+		return nil, err
+	}
+
+	return all, nil
+}
+
 func (w *Wal) Rotate() error {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
