@@ -28,35 +28,28 @@ func isExpiredOrDeleted(en entry.Entry) bool {
 	return entry.IsExpired(en.TTL) || en.Type != entry.DataEntryType
 }
 
-// Mask 32-bit mask is used to store different status information
-type Mask uint32
+// BitFlag 64-bit mask is used to store different status information
+type BitFlag uint64
 
-func (m *Mask) Store(ms ...uint32) {
-	for _, mask := range ms {
-		*m |= Mask(mask)
+func (bf *BitFlag) Store(flags ...uint64) {
+	for _, flag := range flags {
+		*bf |= BitFlag(flag)
 	}
 }
 
-func (m *Mask) Remove(ms ...uint32) {
-	for _, mask := range ms {
-		*m ^= Mask(mask)
+func (bf *BitFlag) Check(flags ...uint64) bool {
+	var f uint64
+	for _, flag := range flags {
+		f |= flag
 	}
+
+	return *bf&BitFlag(f) != 0
 }
 
-func (m *Mask) CheckAny(ms ...uint32) bool {
-	for _, mask := range ms {
-		if *m&Mask(mask) != 0 {
-			return true
-		}
+func (bf *BitFlag) Revoke(flags ...uint64) {
+	var f uint64
+	for _, flag := range flags {
+		f |= flag
 	}
-	return false
-}
-
-func (m *Mask) CheckSome(ms ...uint32) bool {
-	for _, mask := range ms {
-		if *m&Mask(mask) == 0 {
-			return false
-		}
-	}
-	return true
+	*bf ^= BitFlag(f)
 }

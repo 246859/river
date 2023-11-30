@@ -26,15 +26,15 @@ const (
 // if domerge is false, it will only record of merged data, will not replace them to data dir
 func (db *DB) Merge(domerge bool) error {
 
-	if db.mask.CheckAny(closed) {
+	if db.flag.Check(closed) {
 		return ErrDBClosed
 	}
 
 	db.opmu.Lock()
 	defer db.opmu.Unlock()
 
-	db.mask.Store(merging)
-	defer db.mask.Remove(merging)
+	db.flag.Store(merging)
+	defer db.flag.Revoke(merging)
 
 	db.mu.Lock()
 
@@ -307,15 +307,11 @@ func (op *mergeOP) doMerge(lastActiveId uint32) error {
 
 		// process record data
 		switch record.Type {
-		// transaction commit flag
-		case entry.TxnCommitEntryType:
-			expectedLen := loadLenInKey(record.Key)
-			txnSequences[record.TxId] = make([]entryhint, 0, expectedLen)
 		// normal data flag
 		case entry.DataEntryType:
 			txnSequences[record.TxId] = append(txnSequences[record.TxId], entryhint{entry: record, pos: pos})
 		// transaction finished flag
-		case entry.TxnFinishedEntryType:
+		case entry.TxnCommitEntryType:
 			seqs := txnSequences[record.TxId]
 			for _, en := range seqs {
 				en.entry.TxId = mergedTxnId

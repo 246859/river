@@ -14,7 +14,7 @@ func TestMemHash(t *testing.T) {
 	sha1.Sum(s)
 }
 
-func TestMask(t *testing.T) {
+func TestBitFlag(t *testing.T) {
 	const (
 		A = 1 << iota
 		B
@@ -23,17 +23,14 @@ func TestMask(t *testing.T) {
 		E
 		F
 	)
-	var m Mask
+	var m BitFlag
 	m.Store(A, B, E, F)
 
-	res1 := m.CheckAny(A, E, D)
+	res1 := m.Check(A, E, D)
 	assert.True(t, res1)
 
-	res2 := m.CheckSome(A, B)
-	assert.True(t, res2)
+	m.Revoke(B)
 
-	m.Remove(B)
-
-	res3 := m.CheckAny(B)
+	res3 := m.Check(B)
 	assert.False(t, res3)
 }

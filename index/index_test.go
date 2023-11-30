@@ -115,12 +115,8 @@ func testIndexer_Iterator(t *testing.T, indexer Index) {
 	assert.NotNil(t, iterator)
 
 	var i int
-	for {
-		next, out := iterator.Next()
-		if !out {
-			break
-		}
-		assert.EqualValues(t, hints[i], next)
+	for ; iterator.HasNext(); iterator.Next() {
+		assert.EqualValues(t, hints[i], iterator.Hint())
 		i++
 	}
 }

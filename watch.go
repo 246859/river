@@ -25,7 +25,7 @@ var (
 )
 
 func (db *DB) Watch() (<-chan *Event, error) {
-	if db.mask.CheckAny(closed) {
+	if db.flag.Check(closed) {
 		return nil, ErrDBClosed
 	}
 

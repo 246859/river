@@ -2,16 +2,14 @@ package riverdb
 
 import (
 	"cmp"
-	"encoding/binary"
 	"github.com/246859/containers/heaps"
 	"github.com/246859/river/entry"
 	"github.com/246859/river/index"
 	"github.com/246859/river/pkg/str"
 	"github.com/246859/river/wal"
 	"github.com/bwmarrin/snowflake"
-	"github.com/google/btree"
 	"github.com/pkg/errors"
-	"regexp"
+	"io"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -24,7 +22,7 @@ var (
 	ErrTxnConflict = errors.New("transaction is conflict")
 )
 
-func newTx() (*tx, error) {
+func newTx(db *DB) (*tx, error) {
 	nodeTs := time.Now().UnixNano() % (1 << 10)
 	// nodeTs should be in [0, 1023]
 	node, err := snowflake.NewNode(nodeTs)
@@ -33,11 +31,17 @@ func newTx() (*tx, error) {
 	}
 
 	tx := &tx{
+		db:   db,
 		node: node,
 		active: heaps.NewBinaryHeap[*Txn](200, func(a, b *Txn) int {
 			return cmp.Compare(a.startedTs, b.startedTs)
 		}),
 		committed: make([]*Txn, 0, 200),
+		pendingPool: sync.Pool{New: func() any {
+			return &pendingWrite{
+				tmap:     make(map[string]entry.EType, 20),
+				memIndex: index.BtreeIndex(32, db.option.Compare)}
+		}},
 	}
 
 	tx.ts.Store(time.Now().UnixNano())
@@ -48,6 +52,8 @@ func newTx() (*tx, error) {
 // tx represents transaction manager
 type tx struct {
 	db *DB
+
+	pendingPool sync.Pool
 
 	ts atomic.Int64
 
@@ -152,46 +158,40 @@ func (tx *tx) commit(txn *Txn) error {
 	tx.cleanCommitted()
 
 	// if txn have written data
-	if txn.pending.len() > 0 {
+	if txn.pending.Len() > 0 {
 		db := txn.db
-		var pendingEntry []*entry.Entry
 
-		// collect pending entries
-		txn.pending.iterate(func(item *entry.Entry) bool {
-			item.TxId = txn.id.Int64()
-			pendingEntry = append(pendingEntry, item)
-			return true
-		})
+		// write a flag to mark this transaction is committed
+		if err := txn.pending.Flag(entry.TxnCommitEntryType); err != nil {
+			return err
+		}
 
-		// wrap transaction sequence
-		pendingEntry = wrapTxnSequence(txn, pendingEntry)
+		// update index
+		if err := txn.pending.CommitMemIndex(); err != nil {
+			return err
+		}
 
 		txn.committedTs = tx.newTs()
 		// append to committed
 		tx.committed = append(tx.committed, txn)
 
-		db.mu.Lock()
-		// do writes
-		err := db.doWrites(pendingEntry)
-		if err != nil {
-			db.mu.Unlock()
-			return err
-		}
-		db.mu.Unlock()
-
 		// notify watcher
 		if db.watcher != nil {
-			for _, e := range pendingEntry {
-				event := &Event{Value: e}
-				switch e.Type {
+			err := txn.pending.Iterator(RangeOptions{}, func(et entry.EType, hint index.Hint) error {
+				event := &Event{Value: hint.Key}
+				switch et {
 				case entry.DataEntryType:
 					event.Type = PutEvent
 				case entry.DeletedEntryType:
 					event.Type = DelEvent
 				default:
-					continue
+					return nil
 				}
 				db.watcher.push(event)
+				return nil
+			})
+			if err != nil {
+				return err
 			}
 		}
 	}
@@ -201,61 +201,50 @@ func (tx *tx) commit(txn *Txn) error {
 	return nil
 }
 
-func (tx *tx) rollback(txn *Txn) {
+func (tx *tx) rollback(txn *Txn) error {
 	db := txn.db
 	// notify watcher
 	if db.watcher != nil && !txn.readonly {
-		txn.pending.iterate(func(item *entry.Entry) bool {
-			db.watcher.push(&Event{
-				Type:  RollbackEvent,
-				Value: item,
-			})
-			return true
+		if err := txn.pending.Flag(entry.TxnRollBackEntryType); err != nil {
+			return err
+		}
+		err := txn.pending.Iterator(RangeOptions{}, func(et entry.EType, hint index.Hint) error {
+			event := &Event{Value: hint.Key}
+			switch et {
+			case entry.DataEntryType:
+				event.Type = PutEvent
+			case entry.DeletedEntryType:
+				event.Type = DelEvent
+			default:
+				return nil
+			}
+			db.watcher.push(event)
+			return nil
 		})
+		if err != nil {
+			return err
+		}
 	}
 	tx.discardTxn(txn, true)
-}
-
-func keyWithLen(length int) Key {
-	bytes := make([]byte, binary.MaxVarintLen64)
-	binary.PutVarint(bytes, int64(length))
-	return bytes
-}
-
-func loadLenInKey(key Key) int {
-	l, _ := binary.Varint(key)
-	return int(l)
-}
-
-func wrapTxnSequence(txn *Txn, seq []*entry.Entry) []*entry.Entry {
-	bytes := keyWithLen(len(seq))
-	seq = append([]*entry.Entry{{TxId: txn.id.Int64(), Type: entry.TxnCommitEntryType, Key: bytes}}, seq...)
-	seq = append(seq, &entry.Entry{TxId: txn.id.Int64(), Type: entry.TxnFinishedEntryType, Key: bytes})
-	return seq
-}
-
-func newPendingTree(compare index.Compare) *btree.BTreeG[*entry.Entry] {
-	return btree.NewG[*entry.Entry](32, func(a, b *entry.Entry) bool {
-		return compare(a.Key, b.Key) == index.Less
-	})
+	return nil
 }
 
 func newTxn(db *DB, readonly bool) *Txn {
-	tx := &Txn{
+	txn := &Txn{
 		db:       db,
 		readonly: readonly,
 	}
 
-	if !tx.readonly {
-		tx.writes = make(map[uint64]struct{})
-		tx.pending = &btreePending{
-			tree: btree.NewG[*entry.Entry](32, func(a, b *entry.Entry) bool {
-				return db.option.Compare(a.Key, b.Key) == index.Less
-			}),
-		}
+	if !txn.readonly {
+		txn.writes = make(map[uint64]struct{})
+		pending := db.tx.pendingPool.Get().(*pendingWrite)
+		pending.txn = txn
+		pending.memIndex.Clear()
+		clear(pending.tmap)
+		txn.pending = pending
 	}
 
-	return tx
+	return txn
 }
 
 // Txn represents a transaction
@@ -270,7 +259,7 @@ type Txn struct {
 	trackLock sync.Mutex
 
 	// pending written data
-	pending pendingWrites
+	pending *pendingWrite
 
 	// ts
 	startedTs   int64
@@ -281,9 +270,11 @@ type Txn struct {
 
 // Begin begins a new transaction
 func (db *DB) Begin(readonly bool) (*Txn, error) {
-	if db.mask.CheckAny(closed) {
+	if db.flag.Check(closed) {
 		return nil, ErrDBClosed
 	}
+	db.opmu.Lock()
+	defer db.opmu.Unlock()
 
 	return db.tx.begin(db, readonly), nil
 }
@@ -293,7 +284,7 @@ func (txn *Txn) Commit() error {
 		return ErrTxnClosed
 	}
 
-	if txn.db.mask.CheckAny(closed) {
+	if txn.db.flag.Check(closed) {
 		return ErrDBClosed
 	}
 
@@ -305,12 +296,11 @@ func (txn *Txn) RollBack() error {
 		return ErrTxnClosed
 	}
 
-	if txn.db.mask.CheckAny(closed) {
+	if txn.db.flag.Check(closed) {
 		return ErrDBClosed
 	}
 
-	txn.db.tx.rollback(txn)
-	return nil
+	return txn.db.tx.rollback(txn)
 }
 
 func (txn *Txn) Get(key Key) (Value, error) {
@@ -319,17 +309,22 @@ func (txn *Txn) Get(key Key) (Value, error) {
 		return en.Value, ErrNilKey
 	}
 
+	// if not readonly, try to find it from pending-write
 	if !txn.readonly {
-		// if find it from pendingWrites
-		if txnEn, has := txn.pending.get(key); has && !isExpiredOrDeleted(*txnEn) {
-			return txnEn.Value, nil
+		record, found, err := txn.pending.Get(key)
+		if err != nil {
+			return nil, err
+		} else if found && isExpiredOrDeleted(*record) {
+			return nil, ErrKeyNotFound
+		} else if found {
+			// no need to track reading from pendingWrites
+			// because these pending data are impossible be modified by other transactions
+			return record.Value, nil
 		}
-		// no need to track reading from pendingWrites
-		// for it depend on pending data that impossible to be modified by other transactions
 		txn.trackRead(key)
 	}
 
-	// io access
+	// read from data
 	value, err := txn.db.get(key)
 	if err != nil {
 		return en.Value, err
@@ -356,15 +351,20 @@ func (txn *Txn) ttl(key Key) (int64, error) {
 	}
 
 	if !txn.readonly {
-		// if find it from pendingWrites
-		if txnEn, has := txn.pending.get(key); has && !isExpiredOrDeleted(*txnEn) {
-			return txnEn.TTL, nil
+		record, found, err := txn.pending.Get(key)
+		if err != nil {
+			return 0, err
+		} else if found && isExpiredOrDeleted(*record) {
+			return 0, ErrKeyNotFound
+		} else if found {
+			// no need to track reading from pendingWrites
+			// because these pending data are impossible be modified by other transactions
+			return record.TTL, nil
 		}
-		// no need to track reading from pendingWrites
-		// for it depend on pending data that impossible to be modified by other transactions
 		txn.trackRead(key)
 	}
 
+	// read from index
 	hint, err := txn.db.getHint(key)
 	if err != nil {
 		return -1, err
@@ -435,73 +435,43 @@ func (txn *Txn) Range(opt RangeOptions, handler RangeHandler) error {
 		return err
 	}
 
-	compare := txn.db.option.Compare
-
-	// store index range and pending snapshot
-	snapshot := newPendingTree(txn.db.option.Compare)
-	// copy the elements to snapshot
-	err = txn.db.ranges(it, func(key Key) bool {
-		snapshot.ReplaceOrInsert(&entry.Entry{Key: key})
-		return true
+	snapshot := index.BtreeIndex(32, txn.db.option.Compare)
+	err = index.Ranges(it, func(hint index.Hint) error {
+		if entry.IsExpired(hint.TTL) {
+			return nil
+		}
+		return snapshot.Put(hint)
 	})
-
 	if err != nil {
 		return err
 	}
 
-	min, hasMin := snapshot.Min()
-	max, hasMax := snapshot.Max()
-
-	var rangeErr error
-
-	itFn := func(item *entry.Entry) bool {
-		if txn.closed {
-			rangeErr = ErrTxnClosed
-			return false
-		}
-		return handler(item.Key)
-	}
-
-	if txn.pending != nil {
-		// combine pending iterator and index iterator to snapshot
-		txn.pending.iterate(func(item *entry.Entry) bool {
-			var put bool
-
-			// greater than or equal to min
-			if opt.Min != nil && hasMin && compare(min.Key, item.Key) >= index.Equal {
-				put = true
+	if !txn.readonly {
+		err = txn.pending.Iterator(opt, func(et entry.EType, hint index.Hint) error {
+			switch et {
+			case entry.DataEntryType:
+				if !entry.IsExpired(hint.TTL) {
+					return snapshot.Put(hint)
+				}
+			case entry.DeletedEntryType:
+				_, err := snapshot.Del(hint.Key)
+				return err
 			}
-
-			// less than or equal to max
-			if opt.Max != nil && hasMax && compare(max.Key, item.Key) <= index.Equal {
-				put = true
-			}
-
-			// no range
-			if opt.Min == nil && opt.Max == nil {
-				put = true
-			}
-
-			// pattern match
-			if opt.Pattern != nil {
-				put = regexp.MustCompile(str.BytesToString(opt.Pattern)).Match(item.Key)
-			}
-
-			if put {
-				snapshot.ReplaceOrInsert(item)
-			}
-
-			return true
+			return nil
 		})
+		if err != nil {
+			return err
+		}
 	}
 
-	if opt.Descend {
-		snapshot.Descend(itFn)
-	} else {
-		snapshot.Ascend(itFn)
-	}
+	sit, err := snapshot.Iterator(opt)
 
-	return rangeErr
+	return index.Ranges(sit, func(hint index.Hint) error {
+		if !handler(hint.Key) {
+			return io.EOF
+		}
+		return nil
+	})
 }
 
 func (txn *Txn) put(en entry.Entry) error {
@@ -524,7 +494,9 @@ func (txn *Txn) put(en entry.Entry) error {
 	}
 
 	// write to pending data
-	txn.pending.put(&en)
+	if err := txn.pending.Put(&en); err != nil {
+		return err
+	}
 	// track write
 	txn.trackWrite(en.Key)
 
@@ -552,44 +524,81 @@ func (txn *Txn) discard(fail bool) {
 		txn.reads = nil
 		txn.writes = nil
 	}
+	if !txn.readonly {
+		txn.db.tx.pendingPool.Put(txn.pending)
+	}
 	txn.db = nil
-	txn.pending = nil
 	txn.closed = true
 }
 
-// in transaction, data will be written into pendingWriters.
-// these data will be persisted only after committed
-type pendingWrites interface {
-	get(key Key) (*entry.Entry, bool)
-	put(entry *entry.Entry)
-	del(key Key)
-	len() int
-	iterate(f func(item *entry.Entry) bool)
+type pendingWrite struct {
+	txn      *Txn
+	tmap     map[string]entry.EType
+	memIndex index.Index
 }
 
-// btree implements of pendingWrites
-type btreePending struct {
-	tree *btree.BTreeG[*entry.Entry]
+func (p *pendingWrite) Len() int {
+	if p.memIndex != nil {
+		return p.memIndex.Size()
+	}
+	return 0
 }
 
-func (p *btreePending) len() int {
-	return p.tree.Len()
+func (p *pendingWrite) Get(key Key) (*entry.Entry, bool, error) {
+	db := p.txn.db
+	hint, has := p.memIndex.Get(key)
+	if !has {
+		return nil, false, nil
+	}
+	record, err := db.read(hint.ChunkPos)
+	if err != nil {
+		return nil, false, err
+	}
+	// txid must be same as txn
+	if record.TxId != p.txn.id.Int64() {
+		return nil, false, nil
+	}
+	return &record, true, nil
 }
 
-func (p *btreePending) get(key Key) (*entry.Entry, bool) {
-	return p.tree.Get(&entry.Entry{Key: key})
+func (p *pendingWrite) Put(record *entry.Entry) error {
+	db := p.txn.db
+	record.TxId = p.txn.id.Int64()
+	pos, err := db.write(*record)
+	if err != nil {
+		return err
+	}
+	p.tmap[str.BytesToString(record.Key)] = record.Type
+	return p.memIndex.Put(index.Hint{Key: record.Key, TTL: record.TTL, ChunkPos: pos})
 }
 
-func (p *btreePending) put(entry *entry.Entry) {
-	p.tree.ReplaceOrInsert(entry)
+func (p *pendingWrite) Flag(t entry.EType) error {
+	return p.Put(&entry.Entry{Key: []byte{}, Type: t})
 }
 
-func (p *btreePending) del(key Key) {
-	p.tree.Delete(&entry.Entry{Key: key})
+func (p *pendingWrite) Iterator(options RangeOptions, handle func(et entry.EType, hint index.Hint) error) error {
+	it, err := p.memIndex.Iterator(options)
+	if err != nil {
+		return err
+	}
+	return index.Ranges(it, func(hint index.Hint) error {
+		return handle(p.tmap[str.BytesToString(hint.Key)], hint)
+	})
 }
 
-func (p *btreePending) iterate(f func(item *entry.Entry) bool) {
-	p.tree.Ascend(func(item *entry.Entry) bool {
-		return f(item)
+// CommitMemIndex commits the pending write to the db index
+func (p *pendingWrite) CommitMemIndex() error {
+	db := p.txn.db
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	return p.Iterator(RangeOptions{}, func(et entry.EType, hint index.Hint) error {
+		switch et {
+		case entry.DataEntryType:
+			return db.index.Put(hint)
+		case entry.DeletedEntryType:
+			_, err := db.index.Del(hint.Key)
+			return err
+		}
+		return nil
 	})
 }

@@ -78,7 +78,7 @@ func OpenWithCtx(ctx context.Context, options Options, opts ...Option) (*DB, err
 	}
 
 	// initialize transaction manager
-	db.tx, err = newTx()
+	db.tx, err = newTx(db)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func OpenWithCtx(ctx context.Context, options Options, opts ...Option) (*DB, err
 }
 
 const (
-	backing uint32 = 1 << iota
+	backing uint64 = 1 << iota
 	recovering
 	merging
 	closed
@@ -109,22 +109,26 @@ type DB struct {
 	data   *wal.Wal
 	hint   *wal.Wal
 	finish *wal.Wal
-
 	// mem index
 	index index.Index
+	// mu ensures that only one goroutine can update data or index at a time
+	mu sync.RWMutex
+
 	// event watch
 	watcher *watcher
 
 	// merge operator
 	mergeOp *mergeOP
-	opmu    sync.Mutex
+
+	// opmu has the responsibility of ensuring that all db operations must be synchronized
+	// like backup operations, merge operations
+	opmu sync.Mutex
 
 	// transaction manager
 	tx *tx
 
-	mask Mask
+	flag BitFlag
 
-	mu sync.Mutex
 	// db file lock
 	fu *flock.Flock
 
@@ -134,102 +138,102 @@ type DB struct {
 
 // Get returns value match the given key
 func (db *DB) Get(key Key) (Value, error) {
-	tx, err := db.Begin(true)
+	txn, err := db.Begin(true)
 	defer func() {
 		if err != nil {
-			_ = tx.RollBack()
+			_ = txn.RollBack()
 		}
 	}()
 
 	if err != nil {
 		return nil, err
 	}
-	value, err := tx.Get(key)
+	value, err := txn.Get(key)
 	if err != nil {
 		return value, err
 	}
-	return value, tx.Commit()
+	return value, txn.Commit()
 }
 
 // Put
 // puts a key-value pair into db, overwrite value if key already exists.
-// nil key is invalid, but nil value is allowed.
+// nil key is invalid, but nil value is allowed, it will be overwritten to empty []byte.
 // if tll == 0, key will be persisted, or ttl < 0, key will apply the previous ttl.
 func (db *DB) Put(key Key, value Value, ttl time.Duration) error {
-	tx, err := db.Begin(false)
+	txn, err := db.Begin(false)
 	defer func() {
 		if err != nil {
-			_ = tx.RollBack()
+			_ = txn.RollBack()
 		}
 	}()
 
 	if err != nil {
 		return err
 	}
-	err = tx.Put(key, value, ttl)
+	err = txn.Put(key, value, ttl)
 	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	return txn.Commit()
 }
 
 // Del remove the key-value pair match the give key from db.
 // it will return nil if key not exist
 func (db *DB) Del(key Key) error {
-	tx, err := db.Begin(false)
+	txn, err := db.Begin(false)
 	defer func() {
 		if err != nil {
-			_ = tx.RollBack()
+			_ = txn.RollBack()
 		}
 	}()
 
 	if err != nil {
 		return err
 	}
-	err = tx.Del(key)
+	err = txn.Del(key)
 	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	return txn.Commit()
 }
 
 // Expire update ttl of the specified key
 // if ttl <= 0, the key will never expired
 func (db *DB) Expire(key Key, ttl time.Duration) error {
-	tx, err := db.Begin(false)
+	txn, err := db.Begin(false)
 	defer func() {
 		if err != nil {
-			_ = tx.RollBack()
+			_ = txn.RollBack()
 		}
 	}()
 
 	if err != nil {
 		return err
 	}
-	err = tx.Expire(key, ttl)
+	err = txn.Expire(key, ttl)
 	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	return txn.Commit()
 }
 
 // TTL returns left live time of the specified key
 func (db *DB) TTL(key Key) (time.Duration, error) {
-	tx, err := db.Begin(true)
+	txn, err := db.Begin(true)
 	defer func() {
 		if err != nil {
-			_ = tx.RollBack()
+			_ = txn.RollBack()
 		}
 	}()
 
 	if err != nil {
 		return 0, err
 	}
-	ttl, err := tx.TTL(key)
+	ttl, err := txn.TTL(key)
 	if err != nil {
 		return ttl, err
 	}
-	return ttl, tx.Commit()
+	return ttl, txn.Commit()
 }
 
 type RangeOptions = index.RangeOption
@@ -237,21 +241,21 @@ type RangeOptions = index.RangeOption
 // Range iterates over all the keys that match the given RangeOption
 // and call handler for each key-value
 func (db *DB) Range(option RangeOptions, handler RangeHandler) error {
-	tx, err := db.Begin(true)
+	txn, err := db.Begin(true)
 	defer func() {
 		if err != nil {
-			_ = tx.RollBack()
+			_ = txn.RollBack()
 		}
 	}()
 
 	if err != nil {
 		return err
 	}
-	err = tx.Range(option, handler)
+	err = txn.Range(option, handler)
 	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	return txn.Commit()
 }
 
 func (db *DB) get(key Key) (entry.Entry, error) {
@@ -289,54 +293,43 @@ func (db *DB) getHint(key Key) (index.Hint, error) {
 	return hint, nil
 }
 
-func (db *DB) ranges(it index.Iterator, handler RangeHandler) error {
-	if it == nil {
-		return index.ErrNilIterator
-	}
-	for {
-		hint, out := it.Next()
-
-		if entry.IsExpired(hint.TTL) {
-			continue
-		}
-
-		if !handler(hint.Key) {
-			return nil
-		}
-
-		if out {
-			return it.Close()
-		}
-	}
-}
-
 // Purge remove all entries from data wal
 func (db *DB) Purge() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	if err := db.data.Purge(); err != nil {
-		return err
+	purges := []interface {
+		Purge() error
+	}{
+		db.data,
+		db.hint,
+		db.finish,
 	}
-	if err := db.hint.Purge(); err != nil {
-		return err
+
+	// purge wal files
+	for _, purge := range purges {
+		if purge == (*wal.Wal)(nil) {
+			continue
+		}
+		if err := purge.Purge(); err != nil {
+			return err
+		}
 	}
-	if err := db.finish.Purge(); err != nil {
-		return err
-	}
+
+	// clear merge data
 	if err := db.mergeOp.clean(); err != nil {
 		return err
 	}
-	if err := db.load(); err != nil {
-		return err
-	}
+
+	// clear index
+	db.index.Clear()
 
 	return nil
 }
 
 // Sync syncs written buffer to disk
 func (db *DB) Sync() error {
-	if db.mask.CheckAny(closed) {
+	if db.flag.Check(closed) {
 		return ErrDBClosed
 	}
 
@@ -368,7 +361,7 @@ func (db *DB) closeWal() error {
 // Close closes db
 // Once the db is closed, it can no longer be used
 func (db *DB) Close() error {
-	if db.mask.CheckAny(closed) {
+	if db.flag.Check(closed) {
 		return ErrDBClosed
 	}
 
@@ -445,7 +438,7 @@ func (db *DB) unlockDir() error {
 // discard db fields for convenient to gc
 // must be called in lock
 func (db *DB) discard() {
-	db.mask.Store(closed)
+	db.flag.Store(closed)
 
 	db.ctx = nil
 	db.cancel = nil
@@ -458,51 +451,6 @@ func (db *DB) discard() {
 	db.tx = nil
 	db.fu = nil
 	db.serializer = nil
-}
-
-// doWrites write all the entries to db, then updates index in mem
-func (db *DB) doWrites(entries []*entry.Entry) error {
-	if entries == nil || len(entries) == 0 {
-		return nil
-	}
-
-	// pending writes
-	for _, ee := range entries {
-		bytes, err := db.serializer.MarshalEntry(*ee)
-		if err != nil {
-			return err
-		}
-		db.data.PendingWrite(bytes)
-	}
-
-	// pending push, write data to disk
-	chunkPos, err := db.data.PendingPush()
-	if err != nil {
-		return err
-	}
-
-	// update index
-	for i, pos := range chunkPos {
-		en := index.Hint{
-			Key:      entries[i].Key,
-			TTL:      entries[i].TTL,
-			ChunkPos: pos,
-		}
-
-		var err error
-
-		switch entries[i].Type {
-		case entry.DataEntryType:
-			err = db.index.Put(en)
-		case entry.DeletedEntryType:
-			_, err = db.index.Del(en.Key)
-		}
-
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 type entryhint struct {
@@ -626,15 +574,11 @@ func (db *DB) loadIndexFromData(minFid, maxFid uint32) error {
 
 		// process record data
 		switch record.Type {
-		// transaction commit flag
-		case entry.TxnCommitEntryType:
-			expectedLen := loadLenInKey(record.Key)
-			txnSequences[record.TxId] = make([]entryhint, 0, expectedLen)
 		// normal data flag
 		case entry.DataEntryType, entry.DeletedEntryType:
 			txnSequences[record.TxId] = append(txnSequences[record.TxId], entryhint{entry: record, pos: pos})
 		// transaction finished flag
-		case entry.TxnFinishedEntryType:
+		case entry.TxnCommitEntryType:
 			seqs := txnSequences[record.TxId]
 			for _, en := range seqs {
 				var idxErr error
@@ -678,4 +622,34 @@ func (db *DB) loadData() error {
 	}
 	db.data = datawal
 	return nil
+}
+
+func (db *DB) read(pos wal.ChunkPos) (entry.Entry, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	raw, err := db.data.Read(pos)
+	if err != nil {
+		return entry.Entry{}, err
+	}
+	record, err := db.serializer.UnMarshalEntry(raw)
+	if err != nil {
+		return entry.Entry{}, err
+	}
+	return record, nil
+}
+
+func (db *DB) write(entry entry.Entry) (wal.ChunkPos, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	raw, err := db.serializer.MarshalEntry(entry)
+	if err != nil {
+		return wal.ChunkPos{}, err
+	}
+	pos, err := db.data.Write(raw)
+	if err != nil {
+		return wal.ChunkPos{}, err
+	}
+	return pos, nil
 }

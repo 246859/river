@@ -628,3 +628,35 @@ func TestDB_Range(t *testing.T) {
 		assert.Equal(t, 1, count)
 	}
 }
+
+func TestDB_Purge(t *testing.T) {
+	db, closeDB, err := testDB(t.Name(), DefaultOptions)
+	assert.Nil(t, err)
+	defer func() {
+		err := closeDB()
+		assert.Nil(t, err)
+	}()
+
+	key, value := []byte("hello world!"), []byte("value")
+	err = db.Put(key, value, 0)
+	assert.Nil(t, err)
+
+	getV, err := db.Get(key)
+	assert.Nil(t, err)
+	assert.EqualValues(t, value, getV)
+
+	// purge data
+	err = db.Purge()
+	assert.Nil(t, err)
+
+	getV, err = db.Get(key)
+	assert.Nil(t, getV)
+	assert.ErrorIs(t, err, ErrKeyNotFound)
+
+	err = db.Put(key, value, 0)
+	assert.Nil(t, err)
+
+	getV, err = db.Get(key)
+	assert.Nil(t, err)
+	assert.EqualValues(t, value, getV)
+}
