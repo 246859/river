@@ -4,6 +4,7 @@ import (
 	"github.com/246859/river/types"
 	"github.com/stretchr/testify/assert"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -88,4 +89,31 @@ func TestPending_Rotate(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Len(t, chunkPos, 1)
 	assert.EqualValues(t, 2, chunkPos[0].Fid)
+}
+
+func TestPending_Concurrent(t *testing.T) {
+	wal := tempWal(test_option)
+	defer clean(wal)
+
+	var wg sync.WaitGroup
+	var mp = make(map[uint32]struct{}, 10)
+	wg.Add(10)
+	for i := 0; i < 10; i++ {
+		go func() {
+			defer wg.Done()
+			pending := wal.Pending(20)
+			// make sure full of block and no left space to hold another chunk
+			err := pending.Write([]byte(strings.Repeat("a", MaxBlockSize-ChunkHeaderSize-1)))
+			assert.Nil(t, err)
+
+			flush, err := pending.Flush(true)
+			assert.Nil(t, err)
+			assert.Len(t, flush, 1)
+			mp[flush[0].Block] = struct{}{}
+			t.Log(flush[0].Block)
+		}()
+	}
+
+	wg.Wait()
+	assert.EqualValues(t, 10, len(mp))
 }
