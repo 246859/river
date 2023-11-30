@@ -5,8 +5,6 @@ import (
 	"github.com/246859/containers/heaps"
 	"github.com/246859/river/entry"
 	"github.com/246859/river/index"
-	"github.com/246859/river/pkg/str"
-	"github.com/246859/river/wal"
 	"github.com/bwmarrin/snowflake"
 	"github.com/pkg/errors"
 	"io"
@@ -39,7 +37,6 @@ func newTx(db *DB) (*tx, error) {
 		committed: make([]*Txn, 0, 200),
 		pendingPool: sync.Pool{New: func() any {
 			return &pendingWrite{
-				tmap:     make(map[string]entry.EType, 20),
 				memIndex: index.BtreeIndex(32, db.option.Compare)}
 		}},
 	}
@@ -166,10 +163,13 @@ func (tx *tx) commit(txn *Txn) error {
 			return err
 		}
 
+		db.mu.Lock()
 		// update index
 		if err := txn.pending.CommitMemIndex(); err != nil {
+			db.mu.Unlock()
 			return err
 		}
+		db.mu.Unlock()
 
 		txn.committedTs = tx.newTs()
 		// append to committed
@@ -177,7 +177,7 @@ func (tx *tx) commit(txn *Txn) error {
 
 		// notify watcher
 		if db.watcher != nil {
-			err := txn.pending.Iterator(RangeOptions{}, func(et entry.EType, hint index.Hint) error {
+			err := txn.pending.Iterate(RangeOptions{}, func(et entry.EType, hint index.Hint) error {
 				event := &Event{Value: hint.Key}
 				switch et {
 				case entry.DataEntryType:
@@ -204,25 +204,27 @@ func (tx *tx) commit(txn *Txn) error {
 func (tx *tx) rollback(txn *Txn) error {
 	db := txn.db
 	// notify watcher
-	if db.watcher != nil && !txn.readonly {
+	if !txn.readonly {
 		if err := txn.pending.Flag(entry.TxnRollBackEntryType); err != nil {
 			return err
 		}
-		err := txn.pending.Iterator(RangeOptions{}, func(et entry.EType, hint index.Hint) error {
-			event := &Event{Value: hint.Key}
-			switch et {
-			case entry.DataEntryType:
-				event.Type = PutEvent
-			case entry.DeletedEntryType:
-				event.Type = DelEvent
-			default:
+		if db.watcher != nil {
+			err := txn.pending.Iterate(RangeOptions{}, func(et entry.EType, hint index.Hint) error {
+				event := &Event{Value: hint.Key}
+				switch et {
+				case entry.DataEntryType:
+					event.Type = PutEvent
+				case entry.DeletedEntryType:
+					event.Type = DelEvent
+				default:
+					return nil
+				}
+				db.watcher.push(event)
 				return nil
+			})
+			if err != nil {
+				return err
 			}
-			db.watcher.push(event)
-			return nil
-		})
-		if err != nil {
-			return err
 		}
 	}
 	tx.discardTxn(txn, true)
@@ -240,7 +242,6 @@ func newTxn(db *DB, readonly bool) *Txn {
 		pending := db.tx.pendingPool.Get().(*pendingWrite)
 		pending.txn = txn
 		pending.memIndex.Clear()
-		clear(pending.tmap)
 		txn.pending = pending
 	}
 
@@ -347,19 +348,17 @@ func (txn *Txn) TTL(key Key) (time.Duration, error) {
 
 func (txn *Txn) ttl(key Key) (int64, error) {
 	if key == nil {
-		return -1, ErrNilKey
+		return 0, ErrNilKey
 	}
 
 	if !txn.readonly {
-		record, found, err := txn.pending.Get(key)
-		if err != nil {
-			return 0, err
-		} else if found && isExpiredOrDeleted(*record) {
-			return 0, ErrKeyNotFound
-		} else if found {
-			// no need to track reading from pendingWrites
-			// because these pending data are impossible be modified by other transactions
-			return record.TTL, nil
+		pendingHint, has := txn.pending.memIndex.Get(key)
+		if has {
+			if isExpiredOrDeleted(entry.Entry{Type: pendingHint.Meta.(entry.EType), TTL: pendingHint.TTL}) {
+				return 0, ErrKeyNotFound
+			} else {
+				return pendingHint.TTL, nil
+			}
 		}
 		txn.trackRead(key)
 	}
@@ -367,7 +366,7 @@ func (txn *Txn) ttl(key Key) (int64, error) {
 	// read from index
 	hint, err := txn.db.getHint(key)
 	if err != nil {
-		return -1, err
+		return 0, err
 	}
 
 	if hint.TTL <= 0 {
@@ -378,7 +377,6 @@ func (txn *Txn) ttl(key Key) (int64, error) {
 }
 
 func (txn *Txn) Put(key Key, value Value, ttl time.Duration) error {
-
 	en := entry.Entry{
 		Type:  entry.DataEntryType,
 		Key:   key,
@@ -402,7 +400,7 @@ func (txn *Txn) Put(key Key, value Value, ttl time.Duration) error {
 		}
 	}
 
-	return txn.put(en)
+	return txn.put(&en)
 }
 
 func (txn *Txn) Del(key Key) error {
@@ -418,7 +416,7 @@ func (txn *Txn) Del(key Key) error {
 		Type: entry.DeletedEntryType,
 		Key:  key,
 	}
-	return txn.put(en)
+	return txn.put(&en)
 }
 
 func (txn *Txn) Expire(key Key, ttl time.Duration) error {
@@ -447,7 +445,7 @@ func (txn *Txn) Range(opt RangeOptions, handler RangeHandler) error {
 	}
 
 	if !txn.readonly {
-		err = txn.pending.Iterator(opt, func(et entry.EType, hint index.Hint) error {
+		err = txn.pending.Iterate(opt, func(et entry.EType, hint index.Hint) error {
 			switch et {
 			case entry.DataEntryType:
 				if !entry.IsExpired(hint.TTL) {
@@ -474,7 +472,7 @@ func (txn *Txn) Range(opt RangeOptions, handler RangeHandler) error {
 	})
 }
 
-func (txn *Txn) put(en entry.Entry) error {
+func (txn *Txn) put(en *entry.Entry) error {
 	if txn.readonly {
 		return ErrTxnReadonly
 	}
@@ -483,18 +481,8 @@ func (txn *Txn) put(en entry.Entry) error {
 		return ErrNilKey
 	}
 
-	if en.Type != entry.DataEntryType && en.Type != entry.DeletedEntryType {
-		return entry.ErrRedundantEntryType
-	}
-
-	// check size
-	enSize := int64(len(en.Key) + len(en.Value))
-	if enSize > txn.db.option.MaxSize {
-		return wal.ErrDataExceedFile
-	}
-
 	// write to pending data
-	if err := txn.pending.Put(&en); err != nil {
+	if err := txn.pending.Put(en); err != nil {
 		return err
 	}
 	// track write
@@ -531,23 +519,24 @@ func (txn *Txn) discard(fail bool) {
 	txn.closed = true
 }
 
+// pendingWrite maintains a temporary index, whose behavior same as db index mostly.
+// all written entries in transactions, their hints will be updated into the pending index rather than db index
+// only transaction is committed successfully, then pending index will be written to db index.
+// if transaction has been rolled back, these pending index will be cleared for re-used by other transactions.
 type pendingWrite struct {
 	txn      *Txn
-	tmap     map[string]entry.EType
 	memIndex index.Index
 }
 
 func (p *pendingWrite) Len() int {
-	if p.memIndex != nil {
-		return p.memIndex.Size()
-	}
-	return 0
+	return p.memIndex.Size()
 }
 
+// Get returns the entry from pending index
 func (p *pendingWrite) Get(key Key) (*entry.Entry, bool, error) {
 	db := p.txn.db
 	hint, has := p.memIndex.Get(key)
-	if !has {
+	if !has || hint.Meta.(entry.EType) != entry.DataEntryType {
 		return nil, false, nil
 	}
 	record, err := db.read(hint.ChunkPos)
@@ -558,40 +547,40 @@ func (p *pendingWrite) Get(key Key) (*entry.Entry, bool, error) {
 	if record.TxId != p.txn.id.Int64() {
 		return nil, false, nil
 	}
-	return &record, true, nil
+	return record, true, nil
 }
 
+// Put writes a data entry to database, and record of hint in pending index
 func (p *pendingWrite) Put(record *entry.Entry) error {
 	db := p.txn.db
 	record.TxId = p.txn.id.Int64()
-	pos, err := db.write(*record)
+	pos, err := db.write(record)
 	if err != nil {
 		return err
 	}
-	p.tmap[str.BytesToString(record.Key)] = record.Type
-	return p.memIndex.Put(index.Hint{Key: record.Key, TTL: record.TTL, ChunkPos: pos})
+	return p.memIndex.Put(index.Hint{Key: record.Key, TTL: record.TTL, ChunkPos: pos, Meta: record.Type})
 }
 
+// Flag writes an empty k-v entry which type is not normal data type
 func (p *pendingWrite) Flag(t entry.EType) error {
 	return p.Put(&entry.Entry{Key: []byte{}, Type: t})
 }
 
-func (p *pendingWrite) Iterator(options RangeOptions, handle func(et entry.EType, hint index.Hint) error) error {
+// Iterate iterates over all entries in pending index in way of that same as index range
+func (p *pendingWrite) Iterate(options RangeOptions, handle func(et entry.EType, hint index.Hint) error) error {
 	it, err := p.memIndex.Iterator(options)
 	if err != nil {
 		return err
 	}
 	return index.Ranges(it, func(hint index.Hint) error {
-		return handle(p.tmap[str.BytesToString(hint.Key)], hint)
+		return handle(hint.Meta.(entry.EType), hint)
 	})
 }
 
 // CommitMemIndex commits the pending write to the db index
 func (p *pendingWrite) CommitMemIndex() error {
 	db := p.txn.db
-	db.mu.Lock()
-	defer db.mu.Unlock()
-	return p.Iterator(RangeOptions{}, func(et entry.EType, hint index.Hint) error {
+	return p.Iterate(RangeOptions{}, func(et entry.EType, hint index.Hint) error {
 		switch et {
 		case entry.DataEntryType:
 			return db.index.Put(hint)
