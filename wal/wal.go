@@ -9,7 +9,6 @@ import (
 	"github.com/valyala/bytebufferpool"
 	"io"
 	"os"
-	"path"
 	"sort"
 	"sync"
 )
@@ -50,9 +49,9 @@ func reviseOpt(opt Option) (Option, error) {
 	return opt, nil
 }
 
-func defaultOption() Option {
+func DefaultOption(dir string) Option {
 	return Option{
-		DataDir:        path.Join(os.TempDir(), DefaultWalSuffix),
+		DataDir:        dir,
 		MaxFileSize:    types.MB * 768,
 		Ext:            DefaultWalSuffix,
 		BlockCache:     20,
@@ -147,7 +146,6 @@ func Open(option Option) (*Wal, error) {
 	wal := &Wal{
 		option:         option,
 		immutables:     newFBtree(32),
-		pendingBytes:   make([][]byte, 0, 20),
 		byteBufferPool: new(bytebufferpool.Pool),
 	}
 
@@ -192,14 +190,7 @@ type Wal struct {
 	// bytes have written after the last Sync
 	bytesWritten int64
 
-	// bytes have been written to pendingBytes
-	pendingSize int64
-
-	// pendingBytes holds the bytes pending to be written in batches
-	pendingBytes [][]byte
-
-	mutex        sync.RWMutex
-	pendingMutex sync.Mutex
+	mutex sync.RWMutex
 
 	option Option
 }
@@ -252,61 +243,6 @@ func (w *Wal) Write(data []byte) (ChunkPos, error) {
 
 	// decide if sync data to disk
 	if err := w.sync(pos.Size, false); err != nil {
-		return pos, err
-	}
-
-	return pos, nil
-}
-
-// PendingWrite writes data to pendingBytes
-func (w *Wal) PendingWrite(data []byte) {
-	w.pendingMutex.Lock()
-	defer w.pendingMutex.Unlock()
-
-	size := estimateBlockSize(int64(len(data)))
-
-	w.pendingSize += size
-	w.pendingBytes = append(w.pendingBytes, data)
-}
-
-func (w *Wal) PendingClean() {
-	w.pendingMutex.Lock()
-	defer w.pendingMutex.Unlock()
-
-	w.pendingSize = 0
-	w.pendingBytes = w.pendingBytes[:0]
-}
-
-// PendingPush writes pendingBytes to active file
-func (w *Wal) PendingPush() ([]ChunkPos, error) {
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
-
-	if len(w.pendingBytes) == 0 {
-		return []ChunkPos{}, nil
-	}
-
-	// data exceed
-	if w.pendingSize > w.option.MaxFileSize {
-		return nil, ErrDataExceedFile
-	}
-
-	// no left space enough
-	if w.pendingSize+w.active.Size() > w.option.MaxFileSize {
-		if err := w.rotate(); err != nil {
-			return nil, err
-		}
-	}
-
-	pos, err := w.active.WriteAll(w.pendingBytes)
-	if err != nil {
-		return pos, err
-	}
-
-	defer w.PendingClean()
-
-	// decide if sync
-	if err := w.sync(w.pendingSize, false); err != nil {
 		return pos, err
 	}
 
@@ -398,6 +334,7 @@ func (w *Wal) sync(size int64, force bool) error {
 
 	// force sync
 	if force || w.option.FsyncPerWrite {
+		w.bytesWritten = 0
 		return w.active.Sync()
 	}
 
@@ -453,6 +390,10 @@ func (w *Wal) Close() error {
 		return err
 	}
 
+	w.active = nil
+	w.immutables = nil
+	w.blockCache = nil
+
 	return nil
 }
 
@@ -479,9 +420,7 @@ func (w *Wal) Purge() error {
 
 	// discard
 	w.immutables.Clear(false)
-	w.pendingSize = 0
 	w.bytesWritten = 0
-	w.pendingBytes = [][]byte{}
 	if w.blockCache != nil {
 		w.blockCache.Purge()
 	}
