@@ -47,6 +47,10 @@ func BenchmarkDB_B(b *testing.B) {
 		}
 	})
 
+	b.Run("benchmarkDB_Put_value_16B", func(b *testing.B) {
+		benchmarkDB_Put(b, db, testkv, types.B*16)
+	})
+
 	b.Run("benchmarkDB_Put_value_64B", func(b *testing.B) {
 		benchmarkDB_Put(b, db, testkv, types.B*64)
 	})
@@ -87,6 +91,10 @@ func BenchmarkDB_KB(b *testing.B) {
 
 	b.Run("benchmarkDB_Put_value_1KB", func(b *testing.B) {
 		benchmarkDB_Put(b, db, testkv, types.KB)
+	})
+
+	b.Run("benchmarkDB_Put_value_16KB", func(b *testing.B) {
+		benchmarkDB_Put(b, db, testkv, types.KB*16)
 	})
 
 	b.Run("benchmarkDB_Put_value_64KB", func(b *testing.B) {
@@ -148,6 +156,40 @@ func BenchmarkDB_MB(b *testing.B) {
 	})
 
 	b.Run("benchmarkDB_Del_MB", func(b *testing.B) {
+		benchmarkDB_Del(b, db, testkv)
+	})
+}
+
+func BenchmarkDB_Mixed(b *testing.B) {
+	db, closeDB, err := testDB("river-bench", DefaultOptions)
+	if err != nil {
+		panic(err)
+	}
+	testkv := testRandKV()
+
+	b.Cleanup(func() {
+		if err := closeDB(); err != nil {
+			panic(err)
+		}
+	})
+
+	b.Run("benchmarkDB_Put_Mixed_64B", func(b *testing.B) {
+		benchmarkDB_Put(b, db, testkv, types.B*64)
+	})
+
+	b.Run("benchmarkDB_Put_Mixed_128KB", func(b *testing.B) {
+		benchmarkDB_Put(b, db, testkv, types.KB*128)
+	})
+
+	b.Run("benchmarkDB_Put_Mixed_MB", func(b *testing.B) {
+		benchmarkDB_Put(b, db, testkv, types.MB)
+	})
+
+	b.Run("benchmarkDB_Get_Mixed", func(b *testing.B) {
+		benchmarkDB_Get(b, db, testkv)
+	})
+
+	b.Run("benchmarkDB_Del_Mixed", func(b *testing.B) {
 		benchmarkDB_Del(b, db, testkv)
 	})
 }
