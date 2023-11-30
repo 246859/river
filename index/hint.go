@@ -18,6 +18,11 @@ type Hint struct {
 	wal.ChunkPos
 	TTL int64
 	Key Key
+
+	// it will be ignored when marshalling and unmarshalling.
+	// Meta only used in runtime, it will never be persisted to the database,
+	// to save memory, do not stored big data in this field.
+	Meta any
 }
 
 func MarshalHint(hint Hint) []byte {
