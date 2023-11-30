@@ -30,12 +30,13 @@ func tempWal(opt Option) *Wal {
 }
 
 func clean(wal *Wal) {
-	err := wal.Purge()
-	if err != nil {
+	if err := wal.Purge(); err != nil {
 		panic(err)
 	}
-	err = os.RemoveAll(wal.option.DataDir)
-	if err != nil {
+	if err := wal.Close(); err != nil {
+		panic(err)
+	}
+	if err := os.RemoveAll(wal.option.DataDir); err != nil {
 		panic(err)
 	}
 }
@@ -45,6 +46,25 @@ func TestWal_Load(t *testing.T) {
 	wal := tempWal(test_option)
 	assert.True(t, wal.IsEmpty())
 	defer clean(wal)
+}
+
+func TestWal_Purge(t *testing.T) {
+	wal := tempWal(test_option)
+	defer clean(wal)
+
+	// write
+	data := []byte("hello world!")
+	pos, err := wal.Write(data)
+	assert.Nil(t, err)
+	assert.EqualValues(t, pos.Block, 0)
+
+	err = wal.Purge()
+	assert.Nil(t, err)
+
+	data1 := []byte("hello world1")
+	pos1, err := wal.Write(data1)
+	assert.Nil(t, err)
+	assert.EqualValues(t, pos1.Block, 0)
 }
 
 func TestWal_Write_SingleFile(t *testing.T) {

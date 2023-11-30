@@ -434,11 +434,6 @@ func (w *Wal) Close() error {
 
 // Purge close all the file and remove them
 func (w *Wal) Purge() error {
-	err := w.Close()
-	if err != nil {
-		return err
-	}
-
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
@@ -453,11 +448,26 @@ func (w *Wal) Purge() error {
 	}
 
 	// remove active file
-	err = w.active.Remove()
+	err := w.active.Remove()
 	if err != nil {
 		return err
 	}
 
+	// discard
+	w.immutables.Clear(false)
+	w.pendingSize = 0
+	w.bytesWritten = 0
+	w.pendingBytes = [][]byte{}
+	if w.blockCache != nil {
+		w.blockCache.Purge()
+	}
+
+	// open new file
+	newActive, err := openLogFile(w.option.DataDir, w.option.Ext, 1, w.blockCache, w.byteBufferPool)
+	if err != nil {
+		return err
+	}
+	w.active = newActive
 	return nil
 }
 
