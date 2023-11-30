@@ -38,6 +38,12 @@ func (b *BTree) Compare(k1, k2 Key) int {
 	return b.compare(k1, k2)
 }
 
+func (b *BTree) Clear() {
+	b.mutex.Lock()
+	b.tree.Clear(false)
+	b.mutex.Unlock()
+}
+
 func (b *BTree) Iterator(opt RangeOption) (Iterator, error) {
 	b.mutex.RLock()
 	defer b.mutex.RUnlock()
@@ -80,12 +86,12 @@ func (b *BTree) Del(key Key) (bool, error) {
 		return false, entry.ErrNilKey
 	}
 
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
 	if b.tree == nil {
 		return false, ErrClosed
 	}
-
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
 
 	hint := Hint{Key: key}
 	_, exist := b.tree.Delete(hint)
@@ -167,9 +173,9 @@ func newBTreeIterator(btr *BTree, opt RangeOption) (Iterator, error) {
 	}
 
 	iterator = &BTreeIterator{
-		hints:  hints,
-		cursor: 0,
+		hints: hints,
 	}
+	iterator.Rewind()
 
 	return iterator, nil
 }
@@ -179,28 +185,20 @@ type BTreeIterator struct {
 	cursor int
 }
 
-func (bi *BTreeIterator) Next() (Hint, bool) {
-	var (
-		hint Hint
-		out  bool
-	)
-
-	if bi.cursor < len(bi.hints) {
-		hint = bi.hints[bi.cursor]
-		bi.cursor++
-	}
-
-	if bi.cursor >= len(bi.hints) {
-		out = true
-	}
-
-	return hint, out
+func (b *BTreeIterator) Rewind() {
+	b.cursor = 0
 }
 
-func (bi *BTreeIterator) Rewind() {
-	bi.cursor = 0
+func (b *BTreeIterator) Next() {
+	if b.cursor < len(b.hints) {
+		b.cursor++
+	}
 }
 
-func (bi *BTreeIterator) Close() error {
-	return nil
+func (b *BTreeIterator) HasNext() bool {
+	return b.cursor < len(b.hints)
+}
+
+func (b *BTreeIterator) Hint() Hint {
+	return b.hints[b.cursor]
 }

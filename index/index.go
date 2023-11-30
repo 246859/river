@@ -3,6 +3,7 @@ package index
 import (
 	"bytes"
 	"github.com/pkg/errors"
+	"io"
 )
 
 var (
@@ -61,6 +62,8 @@ type Index interface {
 	Close() error
 	// Compare returns -1-less, 0-equal, 1-greater
 	Compare(k1, k2 Key) int
+	// Clear clears all the hints from index
+	Clear()
 }
 
 // Iterator record snapshot of index hints at a certain moment, iterate them in the given order by cursor
@@ -68,8 +71,28 @@ type Index interface {
 type Iterator interface {
 	// Rewind set cursor to the head of hints snapshots
 	Rewind()
-	// Next returns the Hint on the cursor, return true if it is out of range
-	Next() (Hint, bool)
-	// Close releases the resources and close iterator
-	Close() error
+	Next()
+	HasNext() bool
+	Hint() Hint
+}
+
+func Ranges(it Iterator, handle func(hint Hint) error) error {
+	if it == nil {
+		return errors.New("nil iterator provided")
+	}
+
+	if handle == nil {
+		return errors.New("nil handle provided")
+	}
+
+	for ; it.HasNext(); it.Next() {
+		hint := it.Hint()
+		if err := handle(hint); err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
 }
