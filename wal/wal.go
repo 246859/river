@@ -377,7 +377,7 @@ type Stat struct {
 
 // Stat return a simple statistics of wal instance
 func (w *Wal) Stat() Stat {
-	w.mutex.RUnlock()
+	w.mutex.RLock()
 	defer w.mutex.RUnlock()
 
 	var size int64
