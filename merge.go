@@ -128,6 +128,7 @@ func (db *DB) loadIndexFromHint() error {
 		}
 		// ignore error when loading hint
 		db.index.Put(index.UnMarshalHint(rawhint))
+		db.numOfRecord++
 	}
 
 	return nil

@@ -134,6 +134,9 @@ type DB struct {
 
 	serializer entry.Serializer
 	option     Options
+
+	// how many record has been written
+	numOfRecord int64
 }
 
 // Get returns value match the given key
@@ -323,6 +326,7 @@ func (db *DB) Purge() error {
 
 	// clear index
 	db.index.Clear()
+	db.numOfRecord = 0
 
 	return nil
 }
@@ -602,6 +606,7 @@ func (db *DB) loadIndexFromData(minFid, maxFid uint32) error {
 			// release mem
 			txnSequences[record.TxId] = nil
 		}
+		db.numOfRecord++
 	}
 }
 
@@ -651,5 +656,6 @@ func (db *DB) write(entry entry.Entry) (wal.ChunkPos, error) {
 	if err != nil {
 		return wal.ChunkPos{}, err
 	}
+	db.numOfRecord++
 	return pos, nil
 }
