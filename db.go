@@ -629,26 +629,26 @@ func (db *DB) loadData() error {
 	return nil
 }
 
-func (db *DB) read(pos wal.ChunkPos) (entry.Entry, error) {
+func (db *DB) read(pos wal.ChunkPos) (*entry.Entry, error) {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 
 	raw, err := db.data.Read(pos)
 	if err != nil {
-		return entry.Entry{}, err
+		return nil, err
 	}
 	record, err := db.serializer.UnMarshalEntry(raw)
 	if err != nil {
-		return entry.Entry{}, err
+		return nil, err
 	}
-	return record, nil
+	return &record, nil
 }
 
-func (db *DB) write(entry entry.Entry) (wal.ChunkPos, error) {
+func (db *DB) write(entry *entry.Entry) (wal.ChunkPos, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	raw, err := db.serializer.MarshalEntry(entry)
+	raw, err := db.serializer.MarshalEntry(*entry)
 	if err != nil {
 		return wal.ChunkPos{}, err
 	}
@@ -658,4 +658,25 @@ func (db *DB) write(entry entry.Entry) (wal.ChunkPos, error) {
 	}
 	db.numOfRecord++
 	return pos, nil
+}
+
+func (db *DB) writeAll(entries []*entry.Entry, needSync bool) ([]wal.ChunkPos, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	rawdatas := make([][]byte, 0, len(entries))
+
+	for _, en := range entries {
+		bytes, err := db.serializer.MarshalEntry(*en)
+		if err != nil {
+			return nil, err
+		}
+		rawdatas = append(rawdatas, bytes)
+	}
+
+	all, err := db.data.WriteAll(rawdatas, needSync)
+	if err != nil {
+		return nil, err
+	}
+	return all, nil
 }
