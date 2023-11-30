@@ -109,25 +109,62 @@ goos: windows
 goarch: amd64
 pkg: github.com/246859/river
 cpu: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
-BenchmarkDB_B/benchmarkDB_Put_value_64B-16                214749              5798 ns/op            1650 B/op         36 allocs/op
-BenchmarkDB_B/benchmarkDB_Put_value_128B-16               160741              6965 ns/op            1717 B/op         36 allocs/op
-BenchmarkDB_B/benchmarkDB_Put_value_256B-16               136750              7750 ns/op            1866 B/op         37 allocs/op
-BenchmarkDB_B/benchmarkDB_Put_value_512B-16               120902              8818 ns/op            2223 B/op         37 allocs/op
-BenchmarkDB_B/benchmarkDB_Get_B-16                        447379              2560 ns/op            1382 B/op          2 allocs/op
-BenchmarkDB_B/benchmarkDB_Del_B-16                        639976              1809 ns/op             632 B/op         11 allocs/op
-BenchmarkDB_KB/benchmarkDB_Put_value_1KB-16               130693             11007 ns/op            2666 B/op         37 allocs/op
-BenchmarkDB_KB/benchmarkDB_Put_value_64KB-16                4690            321066 ns/op          131357 B/op         41 allocs/op
-BenchmarkDB_KB/benchmarkDB_Put_value_256KB-16               1104           1126429 ns/op          675491 B/op         47 allocs/op
-BenchmarkDB_KB/benchmarkDB_Put_value_512KB-16                512           2308804 ns/op         1620989 B/op         53 allocs/op
-BenchmarkDB_KB/benchmarkDB_Get_KB-16                       15399             69486 ns/op          133335 B/op          3 allocs/op
-BenchmarkDB_KB/benchmarkDB_Del_KB-16                     1007193              1156 ns/op             627 B/op         11 allocs/op
-BenchmarkDB_MB/benchmarkDB_Put_value_1MB-16                  273           4328178 ns/op         1154033 B/op         53 allocs/op
-BenchmarkDB_MB/benchmarkDB_Put_value_8MB-16                   37          39345992 ns/op        10538434 B/op        174 allocs/op
-BenchmarkDB_MB/benchmarkDB_Put_value_16MB-16                  14          73422429 ns/op        28108471 B/op        304 allocs/op
-BenchmarkDB_MB/benchmarkDB_Put_value_32MB-16                   9         161750389 ns/op        72378227 B/op        589 allocs/op
-BenchmarkDB_MB/benchmarkDB_Put_value_64MB-16                   5         344447860 ns/op        214184576 B/op      1214 allocs/op
-BenchmarkDB_MB/benchmarkDB_Get_MB-16                         506           7137680 ns/op        15719500 B/op        205 allocs/op
-BenchmarkDB_MB/benchmarkDB_Del_MB-16                     1711191               691.2 ns/op           626 B/op         10 allocs/op
+BenchmarkDB_B
+BenchmarkDB_B/benchmarkDB_Put_value_16B
+BenchmarkDB_B/benchmarkDB_Put_value_16B-16                108243             11050 ns/op           25658 B/op         27 allocs/op
+BenchmarkDB_B/benchmarkDB_Put_value_64B
+BenchmarkDB_B/benchmarkDB_Put_value_64B-16                 91654             11353 ns/op           25688 B/op         27 allocs/op
+BenchmarkDB_B/benchmarkDB_Put_value_128B
+BenchmarkDB_B/benchmarkDB_Put_value_128B-16                99914             12012 ns/op           25744 B/op         27 allocs/op
+BenchmarkDB_B/benchmarkDB_Put_value_256B
+BenchmarkDB_B/benchmarkDB_Put_value_256B-16                89656             12834 ns/op           25929 B/op         28 allocs/op
+BenchmarkDB_B/benchmarkDB_Put_value_512B
+BenchmarkDB_B/benchmarkDB_Put_value_512B-16                79682             14194 ns/op           26328 B/op         28 allocs/op
+BenchmarkDB_B/benchmarkDB_Get_B
+BenchmarkDB_B/benchmarkDB_Get_B-16                        472155              2478 ns/op            1322 B/op          5 allocs/op
+BenchmarkDB_B/benchmarkDB_Del_B
+BenchmarkDB_B/benchmarkDB_Del_B-16                        642699              1752 ns/op             427 B/op          7 allocs/op
+BenchmarkDB_KB
+BenchmarkDB_KB/benchmarkDB_Put_value_1KB
+BenchmarkDB_KB/benchmarkDB_Put_value_1KB-16                58642             20106 ns/op           26844 B/op         28 allocs/op
+BenchmarkDB_KB/benchmarkDB_Put_value_16KB
+BenchmarkDB_KB/benchmarkDB_Put_value_16KB-16               13563             85796 ns/op           45704 B/op         28 allocs/op
+BenchmarkDB_KB/benchmarkDB_Put_value_64KB
+BenchmarkDB_KB/benchmarkDB_Put_value_64KB-16                3909            296592 ns/op          151887 B/op         32 allocs/op
+BenchmarkDB_KB/benchmarkDB_Put_value_256KB
+BenchmarkDB_KB/benchmarkDB_Put_value_256KB-16               1083           1208055 ns/op          725232 B/op         39 allocs/op
+BenchmarkDB_KB/benchmarkDB_Put_value_512KB
+BenchmarkDB_KB/benchmarkDB_Put_value_512KB-16                466           2341486 ns/op         1636059 B/op         45 allocs/op
+BenchmarkDB_KB/benchmarkDB_Get_KB
+BenchmarkDB_KB/benchmarkDB_Get_KB-16                       38292             27245 ns/op           41288 B/op          5 allocs/op
+BenchmarkDB_KB/benchmarkDB_Del_KB
+BenchmarkDB_KB/benchmarkDB_Del_KB-16                     1091222              1041 ns/op             266 B/op          6 allocs/op
+BenchmarkDB_MB
+BenchmarkDB_MB/benchmarkDB_Put_value_1MB
+BenchmarkDB_MB/benchmarkDB_Put_value_1MB-16                  217           4825615 ns/op         1607356 B/op         50 allocs/op
+BenchmarkDB_MB/benchmarkDB_Put_value_8MB
+BenchmarkDB_MB/benchmarkDB_Put_value_8MB-16                   94          35765929 ns/op        16788028 B/op        164 allocs/op
+BenchmarkDB_MB/benchmarkDB_Put_value_16MB
+BenchmarkDB_MB/benchmarkDB_Put_value_16MB-16                  27          63377081 ns/op        41576377 B/op        259 allocs/op
+BenchmarkDB_MB/benchmarkDB_Put_value_32MB
+BenchmarkDB_MB/benchmarkDB_Put_value_32MB-16                  37         170156170 ns/op        117083367 B/op       651 allocs/op
+BenchmarkDB_MB/benchmarkDB_Put_value_64MB
+BenchmarkDB_MB/benchmarkDB_Put_value_64MB-16                   4         250742625 ns/op        194236838 B/op       901 allocs/op
+BenchmarkDB_MB/benchmarkDB_Get_MB
+BenchmarkDB_MB/benchmarkDB_Get_MB-16                        2660            381140 ns/op          805636 B/op         14 allocs/op
+BenchmarkDB_MB/benchmarkDB_Del_MB
+BenchmarkDB_MB/benchmarkDB_Del_MB-16                     1749214               669.4 ns/op           234 B/op          6 allocs/op
+BenchmarkDB_Mixed
+BenchmarkDB_Mixed/benchmarkDB_Put_Mixed_64B
+BenchmarkDB_Mixed/benchmarkDB_Put_Mixed_64B-16             96477             11841 ns/op           25712 B/op         27 allocs/op
+BenchmarkDB_Mixed/benchmarkDB_Put_Mixed_128KB
+BenchmarkDB_Mixed/benchmarkDB_Put_Mixed_128KB-16            2374            611411 ns/op          314365 B/op         35 allocs/op
+BenchmarkDB_Mixed/benchmarkDB_Put_Mixed_MB
+BenchmarkDB_Mixed/benchmarkDB_Put_Mixed_MB-16                226           4977799 ns/op         3562019 B/op         57 allocs/op
+BenchmarkDB_Mixed/benchmarkDB_Get_Mixed
+BenchmarkDB_Mixed/benchmarkDB_Get_Mixed-16                 60637             20533 ns/op           34072 B/op          5 allocs/op
+BenchmarkDB_Mixed/benchmarkDB_Del_Mixed
+BenchmarkDB_Mixed/benchmarkDB_Del_Mixed-16               1073124              1046 ns/op             262 B/op          6 allocs/op
 PASS
-ok      github.com/246859/river 35.047s
+ok      github.com/246859/river 49.126s
 ```
