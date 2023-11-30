@@ -22,11 +22,11 @@ const (
 
 	TxnCommitEntryType
 
-	TxnFinishedEntryType
+	TxnRollBackEntryType
 )
 
 func CheckEntryType(t EType) error {
-	if t < DataEntryType || t > TxnFinishedEntryType {
+	if t < DataEntryType || t > TxnRollBackEntryType {
 		return errors.Wrapf(ErrInvalidEntryType, "%d", t)
 	}
 	return nil
