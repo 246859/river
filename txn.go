@@ -280,6 +280,8 @@ func (db *DB) Begin(readonly bool) (*Txn, error) {
 	return db.tx.begin(db, readonly), nil
 }
 
+// Commit once a transaction committed successfully, its affects will act on database forever.
+// if crashes, db will reload transaction data from wal and update into memory index.
 func (txn *Txn) Commit() error {
 	if txn.closed {
 		return ErrTxnClosed
@@ -292,6 +294,10 @@ func (txn *Txn) Commit() error {
 	return txn.db.tx.commit(txn)
 }
 
+// RollBack could promise consistence of database.
+// if transaction has been committed successfully, it will return ErrTxnClosed and be ignored,
+// otherwise RollBack will write a flag record to make sure data written in this transaction will never be seen,
+// then discard this transaction.
 func (txn *Txn) RollBack() error {
 	if txn.closed {
 		return ErrTxnClosed
@@ -305,9 +311,8 @@ func (txn *Txn) RollBack() error {
 }
 
 func (txn *Txn) Get(key Key) (Value, error) {
-	var en entry.Entry
 	if key == nil {
-		return en.Value, ErrNilKey
+		return nil, ErrNilKey
 	}
 
 	// if not readonly, try to find it from pending-write
@@ -326,13 +331,12 @@ func (txn *Txn) Get(key Key) (Value, error) {
 	}
 
 	// read from data
-	value, err := txn.db.get(key)
+	record, err := txn.db.get(key)
 	if err != nil {
-		return en.Value, err
+		return nil, err
 	}
-	en = value
 
-	return en.Value, nil
+	return record.Value, nil
 }
 
 func (txn *Txn) TTL(key Key) (time.Duration, error) {

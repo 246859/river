@@ -139,23 +139,23 @@ type DB struct {
 	numOfRecord int64
 }
 
-// Get returns value match the given key
+// Get returns value match the given key, if it expired or not found
+// db will return ErrKeyNotFound. nil Key is not allowed.
 func (db *DB) Get(key Key) (Value, error) {
 	txn, err := db.Begin(true)
-	defer func() {
-		if err != nil {
-			_ = txn.RollBack()
-		}
-	}()
-
 	if err != nil {
 		return nil, err
 	}
+	// you'd better call Rollback after transaction begins
+	defer txn.RollBack()
 	value, err := txn.Get(key)
 	if err != nil {
 		return value, err
 	}
-	return value, txn.Commit()
+	if err := txn.Commit(); err != nil {
+		return nil, err
+	}
+	return value, nil
 }
 
 // Put
@@ -164,136 +164,88 @@ func (db *DB) Get(key Key) (Value, error) {
 // if tll == 0, key will be persisted, or ttl < 0, key will apply the previous ttl.
 func (db *DB) Put(key Key, value Value, ttl time.Duration) error {
 	txn, err := db.Begin(false)
-	defer func() {
-		if err != nil {
-			_ = txn.RollBack()
-		}
-	}()
-
 	if err != nil {
 		return err
 	}
-	err = txn.Put(key, value, ttl)
-	if err != nil {
+	defer txn.RollBack()
+	if err := txn.Put(key, value, ttl); err != nil {
 		return err
 	}
-	return txn.Commit()
+	if err := txn.Commit(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Del remove the key-value pair match the give key from db.
 // it will return nil if key not exist
 func (db *DB) Del(key Key) error {
 	txn, err := db.Begin(false)
-	defer func() {
-		if err != nil {
-			_ = txn.RollBack()
-		}
-	}()
-
 	if err != nil {
 		return err
 	}
-	err = txn.Del(key)
-	if err != nil {
+	defer txn.RollBack()
+	if err := txn.Del(key); err != nil {
 		return err
 	}
-	return txn.Commit()
+	if err := txn.Commit(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Expire update ttl of the specified key
 // if ttl <= 0, the key will never expired
 func (db *DB) Expire(key Key, ttl time.Duration) error {
 	txn, err := db.Begin(false)
-	defer func() {
-		if err != nil {
-			_ = txn.RollBack()
-		}
-	}()
-
 	if err != nil {
 		return err
 	}
-	err = txn.Expire(key, ttl)
-	if err != nil {
+	defer txn.RollBack()
+	if err := txn.Expire(key, ttl); err != nil {
 		return err
 	}
-	return txn.Commit()
+	if err := txn.Commit(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // TTL returns left live time of the specified key
 func (db *DB) TTL(key Key) (time.Duration, error) {
 	txn, err := db.Begin(true)
-	defer func() {
-		if err != nil {
-			_ = txn.RollBack()
-		}
-	}()
-
 	if err != nil {
 		return 0, err
 	}
+	defer txn.RollBack()
 	ttl, err := txn.TTL(key)
 	if err != nil {
 		return ttl, err
 	}
-	return ttl, txn.Commit()
+	if err := txn.Commit(); err != nil {
+		return 0, err
+	}
+	return ttl, nil
 }
 
+// RangeOptions is alias of index.RangeOption
 type RangeOptions = index.RangeOption
 
 // Range iterates over all the keys that match the given RangeOption
 // and call handler for each key-value
 func (db *DB) Range(option RangeOptions, handler RangeHandler) error {
 	txn, err := db.Begin(true)
-	defer func() {
-		if err != nil {
-			_ = txn.RollBack()
-		}
-	}()
-
 	if err != nil {
 		return err
 	}
-	err = txn.Range(option, handler)
-	if err != nil {
+	defer txn.RollBack()
+	if err := txn.Range(option, handler); err != nil {
 		return err
 	}
-	return txn.Commit()
-}
-
-func (db *DB) get(key Key) (entry.Entry, error) {
-	// check index
-	hint, err := db.getHint(key)
-	if err != nil {
-		return entry.Entry{}, err
+	if err := txn.Commit(); err != nil {
+		return err
 	}
-
-	// read raw data from wal
-	bytes, err := db.data.Read(hint.ChunkPos)
-
-	if err != nil {
-		return entry.Entry{}, err
-	}
-
-	data, err := db.serializer.UnMarshalEntry(bytes)
-	if err != nil {
-		return entry.Entry{}, err
-	}
-
-	return data, nil
-}
-
-func (db *DB) getHint(key Key) (index.Hint, error) {
-	hint, exist := db.index.Get(key)
-	if !exist {
-		return hint, ErrKeyNotFound
-	}
-
-	if entry.IsExpired(hint.TTL) {
-		return hint, ErrKeyNotFound
-	}
-
-	return hint, nil
+	return nil
 }
 
 // Purge remove all entries from data wal
@@ -630,6 +582,29 @@ func (db *DB) loadData() error {
 	}
 	db.data = datawal
 	return nil
+}
+
+func (db *DB) get(key Key) (*entry.Entry, error) {
+	// check index
+	hint, err := db.getHint(key)
+	if err != nil {
+		return nil, err
+	}
+
+	return db.read(hint.ChunkPos)
+}
+
+func (db *DB) getHint(key Key) (index.Hint, error) {
+	hint, exist := db.index.Get(key)
+	if !exist {
+		return hint, ErrKeyNotFound
+	}
+
+	if entry.IsExpired(hint.TTL) {
+		return hint, ErrKeyNotFound
+	}
+
+	return hint, nil
 }
 
 func (db *DB) read(pos wal.ChunkPos) (*entry.Entry, error) {
