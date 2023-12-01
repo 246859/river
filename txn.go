@@ -346,6 +346,7 @@ func (txn *Txn) TTL(key Key) (time.Duration, error) {
 	return entry.LeftTTl(ttl), nil
 }
 
+// ttl returns the TTL info of the given key without io accessing
 func (txn *Txn) ttl(key Key) (int64, error) {
 	if key == nil {
 		return 0, ErrNilKey
