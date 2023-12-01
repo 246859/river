@@ -1,4 +1,6 @@
 # RiverDB
+![Static Badge](https://img.shields.io/badge/go-%3E%3D1.21-blue)
+![GitHub License](https://img.shields.io/github/license/246859/river)
 
 ```
  ███████   ██                         ███████   ██████
@@ -11,7 +13,7 @@
 ░░     ░░ ░░    ░░     ░░░░░░ ░░░    ░░░░░░░   ░░░░░░░
 ```
 
-RiverDB is a light-weight embeddable key-value nosql database, it is base on bitcask model. Features as follows:
+RiverDB is a light-weight embeddable key-value nosql database, it is base on bitcask model and wal. Features as follows:
 
 - ACID transactions
 - record ttl
