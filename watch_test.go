@@ -12,10 +12,6 @@ import (
 func TestDB_Watch_Mixed(t *testing.T) {
 	db, closeDB, err := testDB(t.Name(), DefaultOptions)
 	assert.Nil(t, err)
-	defer func() {
-		err := closeDB()
-		assert.Nil(t, err)
-	}()
 
 	type record struct {
 		k   []byte
@@ -50,6 +46,7 @@ func TestDB_Watch_Mixed(t *testing.T) {
 	watch, err := db.Watch()
 	assert.Nil(t, err)
 
+	done := make(chan struct{})
 	go func() {
 		i := 0
 		for event := range watch {
@@ -60,8 +57,12 @@ func TestDB_Watch_Mixed(t *testing.T) {
 		t.Log(i)
 
 		t.Log("watcher closed")
+		done <- struct{}{}
 	}()
-	time.Sleep(time.Second * 4)
+	time.Sleep(time.Second * 2)
+	assert.Nil(t, closeDB())
+
+	<-done
 }
 
 func TestDB_Watch_Backup(t *testing.T) {
@@ -69,10 +70,6 @@ func TestDB_Watch_Backup(t *testing.T) {
 	opt.WatchEvents = append(opt.WatchEvents, BackupEvent, RecoverEvent)
 	db, closeDB, err := testDB(t.Name(), opt)
 	assert.Nil(t, err)
-	defer func() {
-		err := closeDB()
-		assert.Nil(t, err)
-	}()
 
 	dest := filepath.Join(os.TempDir(), "temp.zip")
 	err = db.Backup(dest)
@@ -80,6 +77,7 @@ func TestDB_Watch_Backup(t *testing.T) {
 	err = db.Recover(dest)
 	assert.Nil(t, err)
 
+	done := make(chan struct{})
 	go func() {
 		watch, err := db.Watch()
 		assert.Nil(t, err)
@@ -90,7 +88,10 @@ func TestDB_Watch_Backup(t *testing.T) {
 		}
 		t.Log(i)
 		t.Log("watcher closed")
+		done <- struct{}{}
 	}()
 
 	time.Sleep(time.Second * 2)
+	assert.Nil(t, closeDB())
+	<-done
 }

@@ -43,8 +43,9 @@ type Event struct {
 
 func newWatcher(queueSize int, expected ...EventType) *watcher {
 	w := &watcher{
-		expected: expected,
-		events:   queues.NewArrayQueue[*Event](queueSize),
+		expected:  expected,
+		queueSize: queueSize,
+		events:    queues.NewArrayQueue[*Event](queueSize),
 	}
 
 	eventsize := queueSize / 5
