@@ -404,6 +404,9 @@ func (db *DB) lockDir() error {
 
 	if db.fu == nil {
 		lockpath := db.option.filelock
+		if err := os.MkdirAll(db.option.Dir, 0755); err != nil {
+			return err
+		}
 		fl, err := os.OpenFile(lockpath, os.O_CREATE, 0644)
 		if err != nil {
 			return err
