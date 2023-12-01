@@ -13,14 +13,13 @@
 
 RiverDB is a light-weight embeddable key-value nosql database, it is base on bitcask model. Features as follows:
 
-- Using memory for data indexing
-- Using WAL to store actual data on disk
-- Support for ACID transactions
-- Support zip backup and recover from zip
-- Support data ttl
-- Support custom sorting rules
-- Support range matching and iteration
-- Support event watcher
+- ACID transactions
+- record ttl
+- custom key sorting rules
+- range matching and iteration
+- event watcher
+- batch write and delete
+- targzip backup and recover from backup
 
 RiverDB can be used as a standalone database or as an underlying storage engine.
 
@@ -36,7 +35,9 @@ go get -u github.com/246859/river
 
 
 
-## use
+## how to use
+
+### quick start
 
 this is a simple example for use put and get operation.
 
@@ -66,10 +67,55 @@ func main() {
 	}
 	fmt.Println(string(value))
 }
-
 ```
 
-simple use for transaction by `Begin`, `Commit`, `RollBack` APIs.
+Remember to close db after used up.
+
+### iteration
+
+riverdb iteration is key-only.
+
+```go
+import (
+    "fmt"
+    riverdb "github.com/246859/river"
+)
+
+func main() {
+    // open the river db
+    db, err := riverdb.Open(riverdb.DefaultOptions, riverdb.WithDir("riverdb"))
+    if err != nil {
+       panic(err)
+    }
+    defer db.Close()
+    // put key-value pairs
+    err = db.Put([]byte("key"), []byte("value"), 0)
+    if err != nil {
+       panic(err)
+    }
+
+    // get value from key
+    value, err := db.Get([]byte("key"))
+    if err != nil {
+       panic(err)
+    }
+    fmt.Println(string(value))
+
+    db.Range(riverdb.RangeOptions{
+       Min:     nil,
+       Max:     nil,
+       Pattern: nil,
+       Descend: false,
+    }, func(key riverdb.Key) bool {
+       fmt.Println(key)
+       return false
+    })
+}
+```
+
+### transaction
+
+simplely use transaction by `Begin`, `Commit`, `RollBack` APIs.
 
 ```go
 import (
@@ -100,10 +146,178 @@ func main() {
 
 ```
 
-Remember to close db after used up.
+### batch operation
+
+batch operation has better performance than call `db.Put` or `db.Del` directly
+
+```go
+import (
+	"fmt"
+	riverdb "github.com/246859/river"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+)
+
+func main() {
+	// open db
+	db, err := riverdb.Open(riverdb.DefaultOptions, riverdb.WithDir(filepath.Join(os.TempDir(), "example")))
+	if err != nil {
+		panic(err)
+	}
+	// close
+	defer db.Close()
+
+	// open batch
+	batch, err := db.Batch(riverdb.BatchOption{
+		Size:        500,
+		SyncOnFlush: true,
+	})
+
+	var rs []riverdb.Record
+	var ks []riverdb.Key
+
+	for i := 0; i < 1000; i++ {
+		rs = append(rs, riverdb.Record{
+			K:   []byte(strconv.Itoa(i)),
+			V:   []byte(strings.Repeat("a", i)),
+			TTL: 0,
+		})
+		ks = append(ks, rs[i].K)
+	}
+
+	// write all
+	if err := batch.WriteAll(rs); err != nil {
+		panic(err)
+	}
+
+	// delete all
+	if err := batch.DeleteAll(ks); err != nil {
+		panic(err)
+	}
+
+	// wait to batch finished
+	if err := batch.Flush(); err != nil {
+		panic(err)
+	}
+
+	// 2000
+	fmt.Println(batch.Effected())
+}
+```
+
+
+
+### backup & recover
+
+backup only archive data in datadir
+
+```go
+import (
+	riverdb "github.com/246859/river"
+	"os"
+	"path/filepath"
+)
+
+func main() {
+	// open db
+	db, err := riverdb.Open(riverdb.DefaultOptions, riverdb.WithDir(filepath.Join(os.TempDir(), "example")))
+	if err != nil {
+		panic(err)
+	}
+	// close
+	defer db.Close()
+
+	archive := filepath.Join(os.TempDir(), "example.tar.gz")
+	err = db.Backup(archive)
+	if err != nil {
+		panic(err)
+	}
+
+	err = db.Recover(archive)
+	if err != nil {
+		panic(err)
+	}
+}
+```
+
+
+
+### statistic
+
+```go
+func main() {
+	// open db
+	db, err := riverdb.Open(riverdb.DefaultOptions, riverdb.WithDir(filepath.Join(os.TempDir(), "example")))
+	if err != nil {
+		panic(err)
+	}
+	// close
+	defer db.Close()
+	
+    // statistic
+	stats := db.Stats()
+	fmt.Println(stats.DataSize)
+	fmt.Println(stats.HintSize)
+	fmt.Println(stats.KeyNums)
+	fmt.Println(stats.RecordNums)
+}
+```
+
+
+
+### watcher
+
+you can modfiy which event to watch in db option
+
+```go
+import (
+	"fmt"
+	riverdb "github.com/246859/river"
+	"os"
+	"path/filepath"
+	"time"
+)
+
+func main() {
+	// open db
+	db, err := riverdb.Open(riverdb.DefaultOptions, riverdb.WithDir(filepath.Join(os.TempDir(), "example")))
+	if err != nil {
+		panic(err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		watch, err := db.Watch()
+		if err != nil {
+			panic(err)
+		}
+
+		for event := range watch {
+			fmt.Printf("%+v\n", event)
+		}
+		done <- struct{}{}
+	}()
+
+	err = db.Put([]byte("1"), []byte("1"), 0)
+	if err != nil {
+		panic(err)
+	}
+	db.Put([]byte("2"), []byte("3"), 0)
+	db.Del([]byte("2"))
+
+	time.Sleep(time.Second * 2)
+	db.Close()
+	<-done
+}
+
+```
+
 
 
 ## benchmark
+
 ```
 goos: windows
 goarch: amd64
