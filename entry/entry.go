@@ -111,21 +111,17 @@ func Validate(entry Entry) error {
 	return nil
 }
 
-func UnixMill() int64 {
-	return time.Now().UnixMilli()
-}
-
 func NewTTL(ttl time.Duration) int64 {
-	return UnixMill() + ttl.Milliseconds()
+	return time.Now().Add(ttl).UnixMilli()
 }
 
 func LeftTTl(ttl int64) time.Duration {
-	return time.Duration(ttl - UnixMill())
+	return time.UnixMilli(ttl).Sub(time.Now())
 }
 
 // IsExpired
 // if ttl is 0, represents of persistent
 // only if ttl > 0, entry has live time
 func IsExpired(ttl int64) bool {
-	return ttl > 0 && ttl <= UnixMill()
+	return ttl > 0 && ttl <= time.Now().UnixMilli()
 }
