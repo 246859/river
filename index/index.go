@@ -49,11 +49,10 @@ type Index interface {
 	// Get returns the entry matching the given key
 	// if not exist, returns zero-value, false
 	Get(key Key) (Hint, bool)
-	// Put inserts a new entry into the index, replace it if already exists
-	Put(entry Hint) error
-	// Del deletes the entry that matching the given key from the index, and returns true
-	// if not exist, returns false
-	Del(key Key) (bool, error)
+	// Put inserts a new hint into the index, replace it if already exists
+	Put(hs ...Hint) error
+	// Del deletes the entry that matching the given key from the index
+	Del(ks ...Key) error
 	// Size return num of all hints in index
 	Size() int
 	// Iterator returns an iterator of index snapshots at a certain moment

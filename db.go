@@ -297,7 +297,6 @@ func (db *DB) Sync() error {
 
 func (db *DB) closeWal() error {
 	closes := []io.Closer{
-		db.index,
 		db.hint,
 		db.finish,
 		db.data,
@@ -327,6 +326,10 @@ func (db *DB) Close() error {
 
 	err := db.closeWal()
 	if err != nil {
+		return err
+	}
+
+	if err := db.index.Close(); err != nil {
 		return err
 	}
 
@@ -550,7 +553,7 @@ func (db *DB) loadIndexFromData(minFid, maxFid uint32) error {
 					}
 					idxErr = memIndex.Put(index.Hint{Key: en.entry.Key, TTL: en.entry.TTL, ChunkPos: en.pos})
 				case entry.DeletedEntryType:
-					_, idxErr = memIndex.Del(en.entry.Key)
+					idxErr = memIndex.Del(en.entry.Key)
 				}
 
 				if idxErr != nil {
@@ -595,9 +598,9 @@ func (db *DB) get(key Key) (*entry.Entry, error) {
 }
 
 func (db *DB) getHint(key Key) (index.Hint, error) {
-	hint, exist := db.index.Get(key)
-	if !exist {
-		return hint, ErrKeyNotFound
+	hint, err := db.readIndex(key)
+	if err != nil {
+		return hint, err
 	}
 
 	if entry.IsExpired(hint.TTL) {
@@ -605,6 +608,57 @@ func (db *DB) getHint(key Key) (index.Hint, error) {
 	}
 
 	return hint, nil
+}
+
+func (db *DB) readIndex(key Key) (index.Hint, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	hint, has := db.index.Get(key)
+	if !has {
+		return hint, ErrKeyNotFound
+	}
+	return hint, nil
+}
+
+type writeIndex struct {
+	t entry.EType
+	h index.Hint
+}
+
+func (db *DB) writeIndex(hints ...writeIndex) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	var updates []index.Hint
+	var dels []Key
+
+	for _, hint := range hints {
+		switch hint.t {
+		case entry.DataEntryType:
+			updates = append(updates, hint.h)
+		case entry.DeletedEntryType:
+			dels = append(dels, hint.h.Key)
+		}
+	}
+
+	// update in batch
+	if err := db.index.Put(updates...); err != nil {
+		return err
+	}
+
+	// del in batch
+	if err := db.index.Del(dels...); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (db *DB) idxIterator(opt RangeOptions) (index.Iterator, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	return db.index.Iterator(opt)
 }
 
 func (db *DB) read(pos wal.ChunkPos) (*entry.Entry, error) {

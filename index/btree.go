@@ -13,11 +13,12 @@ import (
 
 var (
 	_ Index    = &BTree{}
+	_ Index    = &BTreeN{}
 	_ Iterator = &BTreeIterator{}
 )
 
-func BtreeIndex(degree int, compare Compare) *BTree {
-	bi := new(BTree)
+func BtreeNIndex(degree int, compare Compare) *BTreeN {
+	bi := new(BTreeN)
 	bi.compare = compare
 	bi.tree = btree.NewG[Hint](degree, func(a, b Hint) bool {
 		return compare(a.Key, b.Key) == Less
@@ -25,37 +26,30 @@ func BtreeIndex(degree int, compare Compare) *BTree {
 	return bi
 }
 
-// BTree is btree implementation of Index that
-// allows the actions of finding data, sequential access, inserting data, and deleting to be done in O(log n) time
-type BTree struct {
-	tree  *btree.BTreeG[Hint]
-	mutex sync.RWMutex
-
+// BTreeN btree with no lock
+type BTreeN struct {
+	tree    *btree.BTreeG[Hint]
 	compare Compare
 }
 
-func (b *BTree) Compare(k1, k2 Key) int {
+func (b *BTreeN) Compare(k1, k2 Key) int {
 	return b.compare(k1, k2)
 }
 
-func (b *BTree) Clear() {
-	b.mutex.Lock()
+func (b *BTreeN) Clear() {
 	b.tree.Clear(false)
-	b.mutex.Unlock()
 }
 
-func (b *BTree) Iterator(opt RangeOption) (Iterator, error) {
-	b.mutex.RLock()
-	defer b.mutex.RUnlock()
+func (b *BTreeN) Iterator(opt RangeOption) (Iterator, error) {
 	return newBTreeIterator(b, opt)
 }
 
-func (b *BTree) Get(key Key) (Hint, bool) {
-	if b.tree == nil {
+func (b *BTreeN) Get(key Key) (Hint, bool) {
+	if key == nil {
 		return Hint{}, false
 	}
 
-	if key == nil {
+	if b.tree == nil {
 		return Hint{}, false
 	}
 
@@ -64,56 +58,58 @@ func (b *BTree) Get(key Key) (Hint, bool) {
 	return oldIdx, exist
 }
 
-func (b *BTree) Put(h Hint) error {
-	if h.Key == nil {
-		return entry.ErrNilKey
+func (b *BTreeN) Put(hs ...Hint) error {
+	if len(hs) == 0 {
+		return nil
 	}
 
 	if b.tree == nil {
 		return ErrClosed
 	}
 
-	b.mutex.Lock()
-
-	b.tree.ReplaceOrInsert(h)
-
-	b.mutex.Unlock()
+	for _, h := range hs {
+		if h.Key == nil {
+			return entry.ErrNilKey
+		}
+		b.tree.ReplaceOrInsert(h)
+	}
 	return nil
 }
 
-func (b *BTree) Del(key Key) (bool, error) {
-	if key == nil {
-		return false, entry.ErrNilKey
+func (b *BTreeN) Del(ks ...Key) error {
+	if len(ks) == 0 {
+		return nil
 	}
-
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
 
 	if b.tree == nil {
-		return false, ErrClosed
+		return ErrClosed
 	}
 
-	hint := Hint{Key: key}
-	_, exist := b.tree.Delete(hint)
+	for _, k := range ks {
+		if k == nil {
+			continue
+		}
+		hint := Hint{Key: k}
+		b.tree.Delete(hint)
+	}
 
-	return exist, nil
+	return nil
 }
 
-func (b *BTree) Size() int {
+func (b *BTreeN) Size() int {
 	if b.tree == nil {
 		return 0
 	}
 	return b.tree.Len()
 }
 
-func (b *BTree) Close() error {
-	b.mutex.Lock()
+func (b *BTreeN) Close() error {
+	b.tree.Clear(false)
 	b.tree = nil
-	b.mutex.Unlock()
 	return nil
 }
 
-func newBTreeIterator(btr *BTree, opt RangeOption) (Iterator, error) {
+func newBTreeIterator(btr *BTreeN, opt RangeOption) (Iterator, error) {
 	if btr.tree == nil {
 		return nil, ErrClosed
 	}
@@ -201,4 +197,86 @@ func (b *BTreeIterator) HasNext() bool {
 
 func (b *BTreeIterator) Hint() *Hint {
 	return b.hints[b.cursor]
+}
+
+func BtreeIndex(degree int, compare Compare) *BTree {
+	bi := new(BTree)
+	bi.mutex = sync.RWMutex{}
+	bi.tree = BtreeNIndex(degree, compare)
+	return bi
+}
+
+// BTree is btree implementation of Index that
+// allows the actions of finding data, sequential access, inserting data, and deleting to be done in O(log n) time
+type BTree struct {
+	mutex sync.RWMutex
+	tree  *BTreeN
+}
+
+func (b *BTree) Compare(k1, k2 Key) int {
+	return b.tree.compare(k1, k2)
+}
+
+func (b *BTree) Clear() {
+	b.mutex.Lock()
+	b.tree.Clear()
+	b.mutex.Unlock()
+}
+
+func (b *BTree) Iterator(opt RangeOption) (Iterator, error) {
+	b.mutex.RLock()
+	defer b.mutex.RUnlock()
+	return newBTreeIterator(b.tree, opt)
+}
+
+func (b *BTree) Get(key Key) (Hint, bool) {
+	if key == nil {
+		return Hint{}, false
+	}
+
+	b.mutex.RLock()
+	defer b.mutex.RUnlock()
+
+	return b.tree.Get(key)
+}
+
+func (b *BTree) Put(hs ...Hint) error {
+	if len(hs) == 0 {
+		return nil
+	}
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	if err := b.tree.Put(hs...); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (b *BTree) Del(ks ...Key) error {
+	if len(ks) == 0 {
+		return nil
+	}
+
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	if err := b.tree.Del(ks...); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (b *BTree) Size() int {
+	b.mutex.RLock()
+	defer b.mutex.RUnlock()
+	return b.tree.Size()
+}
+
+func (b *BTree) Close() error {
+	b.mutex.Lock()
+	b.tree.Close()
+	b.mutex.Unlock()
+	return nil
 }

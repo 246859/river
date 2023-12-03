@@ -2,6 +2,7 @@ package index
 
 import (
 	"bytes"
+	"fmt"
 	entry2 "github.com/246859/river/entry"
 	"github.com/246859/river/wal"
 	"github.com/stretchr/testify/assert"
@@ -12,17 +13,41 @@ import (
 )
 
 func TestIndexer(t *testing.T) {
-	indexers := []func() Index{
-		func() Index {
-			return BtreeIndex(32, DefaultCompare)
+
+	type Sample struct {
+		newIndex func() Index
+		name     string
+	}
+
+	samples := []Sample{
+		{
+			newIndex: func() Index {
+				return BtreeIndex(32, DefaultCompare)
+			}, name: "btree",
+		},
+		{
+			newIndex: func() Index {
+				return BtreeNIndex(32, DefaultCompare)
+			}, name: "btreeN",
 		},
 	}
 
-	for _, indexer := range indexers {
-		testIndexer_Get(t, indexer())
-		testIndexer_Put(t, indexer())
-		testIndexer_Del(t, indexer())
-		testIndexer_Iterator(t, indexer())
+	for _, sample := range samples {
+		t.Run(fmt.Sprintf("%s_index_get", sample.name), func(t *testing.T) {
+			testIndexer_Get(t, sample.newIndex())
+		})
+
+		t.Run(fmt.Sprintf("%s_index_put", sample.name), func(t *testing.T) {
+			testIndexer_Put(t, sample.newIndex())
+		})
+
+		t.Run(fmt.Sprintf("%s_index_del", sample.name), func(t *testing.T) {
+			testIndexer_Del(t, sample.newIndex())
+		})
+
+		t.Run(fmt.Sprintf("%s_index_iterate", sample.name), func(t *testing.T) {
+			testIndexer_Iterator(t, sample.newIndex())
+		})
 	}
 }
 
@@ -80,16 +105,13 @@ func testIndexer_Del(t *testing.T, indexer Index) {
 	err = indexer.Put(foo)
 	assert.Nil(t, err)
 
-	e, err := indexer.Del(bar.Key)
-	assert.True(t, e)
+	err = indexer.Del(bar.Key)
 	assert.Nil(t, err)
 
-	e, err = indexer.Del(foo.Key)
-	assert.True(t, e)
+	err = indexer.Del(foo.Key)
 	assert.Nil(t, err)
 
-	e, err = indexer.Del(bob.Key)
-	assert.False(t, e)
+	err = indexer.Del(bob.Key)
 	assert.Nil(t, err)
 }
 
@@ -116,7 +138,11 @@ func testIndexer_Iterator(t *testing.T, indexer Index) {
 
 	var i int
 	for ; iterator.HasNext(); iterator.Next() {
-		assert.EqualValues(t, hints[i], iterator.Hint())
+		assert.EqualValues(t, hints[i].Key, iterator.Hint().Key)
+		assert.EqualValues(t, hints[i].Block, iterator.Hint().Block)
+		assert.EqualValues(t, hints[i].Fid, iterator.Hint().Fid)
+		assert.EqualValues(t, hints[i].Offset, iterator.Hint().Offset)
+		assert.EqualValues(t, hints[i].TTL, iterator.Hint().TTL)
 		i++
 	}
 }

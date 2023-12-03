@@ -433,12 +433,13 @@ func (txn *Txn) Expire(key Key, ttl time.Duration) error {
 }
 
 func (txn *Txn) Range(opt RangeOptions, handler RangeHandler) error {
-	it, err := txn.db.index.Iterator(opt)
+	it, err := txn.db.idxIterator(opt)
 	if err != nil {
 		return err
 	}
 
-	snapshot := index.BtreeIndex(32, txn.db.option.Compare)
+	snapshot := index.BtreeNIndex(32, txn.db.option.Compare)
+	defer snapshot.Close()
 	err = index.Ranges(it, func(hint index.Hint) error {
 		if entry.IsExpired(hint.TTL) {
 			return nil
@@ -457,7 +458,7 @@ func (txn *Txn) Range(opt RangeOptions, handler RangeHandler) error {
 					return snapshot.Put(hint)
 				}
 			case entry.DeletedEntryType:
-				_, err := snapshot.Del(hint.Key)
+				_ = snapshot.Del(hint.Key)
 				return err
 			}
 			return nil
@@ -584,15 +585,18 @@ func (p *pendingWrite) Iterate(options RangeOptions, handle func(et entry.EType,
 
 // CommitMemIndex commits the pending write to the db index
 func (p *pendingWrite) CommitMemIndex() error {
-	db := p.txn.db
-	return p.Iterate(RangeOptions{}, func(et entry.EType, hint index.Hint) error {
-		switch et {
-		case entry.DataEntryType:
-			return db.index.Put(hint)
-		case entry.DeletedEntryType:
-			_, err := db.index.Del(hint.Key)
-			return err
-		}
+	var ws []writeIndex
+	err := p.Iterate(RangeOptions{}, func(et entry.EType, hint index.Hint) error {
+		ws = append(ws, writeIndex{t: et, h: hint})
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	// write to index
+	if err := p.txn.db.writeIndex(ws...); err != nil {
+		return err
+	}
+	return nil
 }
