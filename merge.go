@@ -462,6 +462,10 @@ func doMergeAtCheckpoint(db *DB) {
 				return
 			}
 
+			if db.flag.Check(closed) {
+				return
+			}
+
 			// check db stats
 			stats := db.Stats()
 
