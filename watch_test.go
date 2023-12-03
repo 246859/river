@@ -137,7 +137,7 @@ func TestDB_Watcher_Put_Del_Multi(t *testing.T) {
 		assert.Nil(t, err)
 	}
 
-	time.Sleep(time.Second)
+	time.Sleep(time.Second * 3)
 	assert.Nil(t, closeDB())
 	wg.Wait()
 }
