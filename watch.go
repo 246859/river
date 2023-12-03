@@ -2,14 +2,26 @@ package riverdb
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"github.com/246859/containers/queues"
-	"github.com/pkg/errors"
 	"slices"
 	"sync"
-	"time"
+)
+
+var (
+	ErrWatcherClosed   = errors.New("watcher is closed")
+	ErrInvalidEvent    = errors.New("invalid event")
+	ErrWatcherDisabled = errors.New("event watcher disabled")
 )
 
 type EventType uint
+
+// Event represents a push event
+type Event struct {
+	Type  EventType
+	Value any
+}
 
 const (
 	PutEvent EventType = 1 + iota
@@ -20,115 +32,224 @@ const (
 	RecoverEvent
 )
 
-var (
-	ErrWatcherDisabled = errors.New("event watcher disabled")
-)
+func validEvent(et EventType) bool {
+	ets := []EventType{
+		PutEvent,
+		DelEvent,
+		RollbackEvent,
+		MergeEvent,
+		BackupEvent,
+		RecoverEvent,
+	}
+	return slices.Contains(ets, et)
+}
 
-func (db *DB) Watch() (<-chan *Event, error) {
+// Watcher returns a new event watcher with the given event type, if events is empty, it will apply db.Option
+func (db *DB) Watcher(events ...EventType) (*Watcher, error) {
+
 	if db.flag.Check(closed) {
 		return nil, ErrDBClosed
 	}
 
-	if db.watcher == nil {
+	if db.option.WatchSize == 0 {
 		return nil, ErrWatcherDisabled
 	}
-	return db.watcher.eventCh, nil
-}
 
-// Event represents a push event
-type Event struct {
-	Type  EventType
-	Value any
-}
-
-func newWatcher(queueSize int, expected ...EventType) *watcher {
-	w := &watcher{
-		expected:  expected,
-		queueSize: queueSize,
-		events:    queues.NewArrayQueue[*Event](queueSize),
+	for _, event := range events {
+		if !validEvent(event) {
+			return nil, ErrInvalidEvent
+		}
 	}
 
-	eventsize := queueSize / 5
-	if eventsize <= 0 {
-		eventsize = 20
-	}
-	w.eventSize = eventsize
-	// chan buffer size a little greater than eventsize is to prevent to block watch goroutine if chan is full
-	w.eventCh = make(chan *Event, w.eventSize+5)
-
-	return w
+	w := db.watcher.newWatcher(events...)
+	return w, nil
 }
 
-// watcher has the responsibility of maintaining events queue and channel
-// it will send events while the behavior of database is changed
-type watcher struct {
-	expected  []EventType
+func newWatcherPool(ctx context.Context, queueSize int, events ...EventType) (*watcherPool, error) {
+	for _, event := range events {
+		if !validEvent(event) {
+			return nil, ErrInvalidEvent
+		}
+	}
+
+	w := &watcherPool{
+		ctx:           ctx,
+		expectedEvent: events,
+		pool:          make([]*Watcher, 0, 20),
+		queueSize:     queueSize,
+		eventQueue:    queues.NewArrayQueue[*Event](queueSize),
+	}
+
+	w.chanSize = queueSize / 10
+	if queueSize < 100 {
+		w.chanSize = queueSize / 5
+	} else if queueSize <= 0 {
+		w.chanSize = 10
+	}
+
+	return w, nil
+}
+
+type watcherPool struct {
+	ctx           context.Context
+	mu            sync.Mutex
+	pool          []*Watcher
+	expectedEvent []EventType
+
+	eventQueue *queues.ArrayQueue[*Event]
+
 	queueSize int
-	events    *queues.ArrayQueue[*Event]
+	chanSize  int
 
-	eventSize int
-	eventCh   chan *Event
-
-	mu sync.Mutex
+	done chan struct{}
 }
 
-func (w *watcher) expect(et EventType) bool {
-	return slices.Contains(w.expected, et)
+func (w *watcherPool) newWatcher(ets ...EventType) *Watcher {
+	if len(ets) == 0 {
+		ets = w.expectedEvent
+	}
+	wa := &Watcher{}
+	wa.watch = w
+	// chan buffer size a little greater than eventsize is to prevent to block watch goroutine if chan is full
+	wa.ch = make(chan *Event, w.chanSize+5)
+	wa.expectedEvent = ets
+
+	w.pool = append(w.pool, wa)
+
+	return wa
 }
 
-func (w *watcher) pop() *Event {
+func (w *watcherPool) expected(e EventType) bool {
+	return expectedEvents(w.expectedEvent, e)
+}
+
+func (w *watcherPool) pop() *Event {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	e, _ := w.events.Pop()
+	e, has := w.eventQueue.Pop()
+	if !has {
+		return nil
+	}
 	return e
 }
 
-func (w *watcher) push(eve *Event) {
+func (w *watcherPool) push(e *Event) {
 	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.events.Size() >= w.queueSize {
-		w.events.Pop()
+	size := w.eventQueue.Size()
+	w.mu.Unlock()
+
+	if size >= w.queueSize {
+		w.pop()
 	}
-	if !w.expect(eve.Type) {
-		return
-	}
-	w.events.Push(eve)
+
+	w.mu.Lock()
+	w.eventQueue.Push(e)
+	w.mu.Unlock()
 }
 
-func (w *watcher) clear() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.events.Clear()
-}
-
-func (w *watcher) watch(ctx context.Context) {
-	defer close(w.eventCh)
+// watch the events in the event queue, and notify the watcher in pool
+// it must be running in another goroutine, and it will return when db closed
+func (w *watcherPool) watch() {
+	defer func() {
+		w.Close()
+	}()
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-w.ctx.Done():
 			return
 		default:
-
-			// if channel will be full soon, consume event in channel by self
-			for len(w.eventCh) >= w.eventSize {
-				_, ok := <-w.eventCh
-				if !ok {
-					return
-				}
+			event := w.pop()
+			if event == nil {
+				break
 			}
 
-			if event := w.pop(); event != nil {
-				w.eventCh <- event
-			} else {
-				time.Sleep(5 * time.Millisecond)
+			// notify watcher in pool
+			for _, wa := range w.pool {
+
+				if w.eventQueue == nil {
+					return
+				}
+
+				if wa.closed || !wa.expected(event.Type) {
+					continue
+				}
+
+				for len(wa.ch) >= w.chanSize {
+					fmt.Println("out", (<-wa.ch).Type)
+				}
+
+				wa.ch <- event
 			}
 		}
 	}
 }
 
-func (w *watcher) close() {
+// Close closes all the live watchers in pool and discard self
+func (w *watcherPool) Close() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.events = nil
+
+	for _, wa := range w.pool {
+		if wa.closed {
+			continue
+		}
+		close(wa.ch)
+	}
+	w.pool = nil
+	w.eventQueue = nil
+}
+
+// only use for Watcher to call
+func (w *watcherPool) closeCh(ch chan *Event) {
+	for i, wa := range w.pool {
+		if wa.closed {
+			return
+		}
+
+		if wa.ch == ch {
+			close(wa.ch)
+			w.pool = slices.Delete(w.pool, i, i+1)
+			wa.ch = nil
+			break
+		}
+	}
+}
+
+// Watcher
+// a watcher should be closed after it used up all, or it will be closed when db closed at last
+type Watcher struct {
+	watch         *watcherPool
+	ch            chan *Event
+	expectedEvent []EventType
+	closed        bool
+}
+
+func (w *Watcher) Listen() (<-chan *Event, error) {
+	if w.closed {
+		return nil, ErrWatcherClosed
+	}
+	return w.ch, nil
+}
+
+func (w *Watcher) expected(e EventType) bool {
+	return expectedEvents(w.expectedEvent, e)
+}
+
+// Close closes the watcher.
+func (w *Watcher) Close() error {
+	w.watch.mu.Lock()
+	defer w.watch.mu.Unlock()
+
+	if w.closed {
+		return ErrWatcherClosed
+	}
+
+	w.watch.closeCh(w.ch)
+	w.closed = true
+	return nil
+}
+
+func expectedEvents(events []EventType, e EventType) bool {
+	return slices.Contains(events, e)
 }

@@ -77,7 +77,7 @@ func (db *DB) Merge(domerge bool) error {
 
 	defer func() {
 		// notify watcher
-		if db.watcher != nil && db.watcher.expect(MergeEvent) {
+		if db.watcher != nil && db.watcher.expected(MergeEvent) {
 			db.watcher.push(&Event{Type: MergeEvent, Value: lastActiveId})
 		}
 	}()

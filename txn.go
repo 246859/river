@@ -173,13 +173,19 @@ func (tx *tx) commit(txn *Txn) error {
 		tx.committed = append(tx.committed, txn)
 
 		// notify watcher
-		if db.watcher != nil && (db.watcher.expect(PutEvent) || db.watcher.expect(DelEvent)) {
+		if db.watcher != nil {
 			err := txn.pending.Iterate(RangeOptions{}, func(et entry.EType, hint index.Hint) error {
 				event := &Event{Value: hint.Key}
 				switch et {
 				case entry.DataEntryType:
+					if !db.watcher.expected(PutEvent) {
+						return nil
+					}
 					event.Type = PutEvent
 				case entry.DeletedEntryType:
+					if !db.watcher.expected(DelEvent) {
+						return nil
+					}
 					event.Type = DelEvent
 				default:
 					return nil
@@ -205,7 +211,7 @@ func (tx *tx) rollback(txn *Txn) error {
 		if err := txn.pending.Flag(entry.TxnRollBackEntryType); err != nil {
 			return err
 		}
-		if db.watcher != nil && db.watcher.expect(RollbackEvent) {
+		if db.watcher != nil && db.watcher.expected(RollbackEvent) {
 			err := txn.pending.Iterate(RangeOptions{}, func(et entry.EType, hint index.Hint) error {
 				event := &Event{Value: hint.Key}
 				switch et {

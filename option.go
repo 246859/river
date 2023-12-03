@@ -51,7 +51,7 @@ type Options struct {
 	WatchEvents []EventType
 	// decide how to sort keys
 	Compare index.Compare
-	// manually gc after closed db
+	// manually gc after closed db to release memory used by index
 	ClosedGc bool
 
 	dataDir  string
