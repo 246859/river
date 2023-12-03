@@ -8,7 +8,7 @@ type BinaryEntry struct{}
 // MaxHeaderSize
 // |                     31 B                   |
 // +------+------+----------+--------+----------+---------+---------+
-// | type | ttl  | batch    | key_sz | value_sz | key     | value   |
+// | type | ttl  | txn_id   | key_sz | value_sz | key     | value   |
 // +------+------+----------+--------+----------+---------+---------+
 // | 1 B  | 10 B | 10 B     | 5 B    | 5 B      | unfixed | unfixed |
 // +------+------+----------+--------+----------+---------+---------+
