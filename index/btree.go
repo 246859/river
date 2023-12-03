@@ -139,7 +139,7 @@ func newBTreeIterator(btr *BTree, opt RangeOption) (Iterator, error) {
 		reg = compile
 	}
 
-	hints := make([]Hint, 0, 200)
+	hints := make([]*Hint, 0, 200)
 
 	searchFn := func(h Hint) bool {
 		candidate := true
@@ -147,7 +147,7 @@ func newBTreeIterator(btr *BTree, opt RangeOption) (Iterator, error) {
 			candidate = reg.Match(h.Key)
 		}
 		if candidate {
-			hints = append(hints, h)
+			hints = append(hints, &h)
 		}
 		return true
 	}
@@ -181,7 +181,7 @@ func newBTreeIterator(btr *BTree, opt RangeOption) (Iterator, error) {
 }
 
 type BTreeIterator struct {
-	hints  []Hint
+	hints  []*Hint
 	cursor int
 }
 
@@ -199,6 +199,6 @@ func (b *BTreeIterator) HasNext() bool {
 	return b.cursor < len(b.hints)
 }
 
-func (b *BTreeIterator) Hint() Hint {
+func (b *BTreeIterator) Hint() *Hint {
 	return b.hints[b.cursor]
 }

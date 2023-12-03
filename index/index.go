@@ -73,7 +73,7 @@ type Iterator interface {
 	Rewind()
 	Next()
 	HasNext() bool
-	Hint() Hint
+	Hint() *Hint
 }
 
 func Ranges(it Iterator, handle func(hint Hint) error) error {
@@ -87,7 +87,7 @@ func Ranges(it Iterator, handle func(hint Hint) error) error {
 
 	for ; it.HasNext(); it.Next() {
 		hint := it.Hint()
-		if err := handle(hint); err != nil {
+		if err := handle(*hint); err != nil {
 			if errors.Is(err, io.EOF) {
 				return nil
 			}
