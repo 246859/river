@@ -163,13 +163,10 @@ func (tx *tx) commit(txn *Txn) error {
 			return err
 		}
 
-		db.mu.Lock()
 		// update index
 		if err := txn.pending.CommitMemIndex(); err != nil {
-			db.mu.Unlock()
 			return err
 		}
-		db.mu.Unlock()
 
 		txn.committedTs = tx.newTs()
 		// append to committed
