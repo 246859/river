@@ -16,18 +16,19 @@ const (
 	lockName     = "river"
 )
 
-const defaultMaxFileSize = types.MB * 256
+const defaultMaxFileSize = types.MB * 64
 
 const blockSize = wal.MaxBlockSize
 
 var DefaultOptions = Options{
-	MaxSize:        defaultMaxFileSize,
-	BlockCache:     defaultMaxFileSize / types.MB,
-	Fsync:          false,
-	FsyncThreshold: blockSize * (defaultMaxFileSize / types.MB),
-	Compare:        index.DefaultCompare,
-	WatchSize:      2000,
-	WatchEvents:    []EventType{PutEvent, DelEvent},
+	MaxSize:         defaultMaxFileSize,
+	BlockCache:      defaultMaxFileSize / types.MB,
+	Fsync:           false,
+	FsyncThreshold:  blockSize * (defaultMaxFileSize / types.MB) / 4,
+	Compare:         index.DefaultCompare,
+	WatchSize:       2000,
+	WatchEvents:     []EventType{PutEvent, DelEvent},
+	MergeCheckpoint: 3.5,
 }
 
 // Option applying changes to the given option
@@ -53,6 +54,8 @@ type Options struct {
 	Compare index.Compare
 	// manually gc after closed db to release memory used by index
 	ClosedGc bool
+	// check point of auto merge, disabled if is 0
+	MergeCheckpoint float64
 
 	dataDir  string
 	mergeDir string

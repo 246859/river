@@ -186,3 +186,66 @@ func TestDB_Merge_2(t *testing.T) {
 		assert.EqualValues(t, value, sample.v)
 	}
 }
+
+func TestMerge_CheckPoint(t *testing.T) {
+	// watch merge event
+	opt := DefaultOptions
+	opt.WatchSize = 30000
+	opt.WatchEvents = append(opt.WatchEvents, MergeEvent)
+	db, closeDB, err := testDB(t.Name(), opt)
+	assert.Nil(t, err)
+	defer func() {
+		err := closeDB()
+		assert.Nil(t, err)
+	}()
+
+	testkv := testRandKV()
+
+	var rs []Record
+
+	// must trigger merge event
+	for i := 0; i < 20_000; i++ {
+		rs = append(rs, Record{
+			K:   testkv.testBytes(3),
+			V:   testkv.testBytes(types.KB * 5),
+			TTL: 0,
+		})
+	}
+
+	watcher, err := db.Watcher(MergeEvent)
+	assert.Nil(t, err)
+
+	for _, r := range rs {
+		err := db.Put(r.K, r.V, r.TTL)
+		assert.Nil(t, err)
+	}
+
+	stats := db.Stats()
+
+	t.Log(stats.DataSize)
+	t.Log(stats.KeyNums)
+	t.Log(stats.RecordNums)
+
+	// listen the merge events
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		listen, err := watcher.Listen()
+		assert.Nil(t, err)
+
+		var c int
+		for event := range listen {
+			t.Log(event)
+			assert.Equal(t, MergeEvent, event.Type)
+			c++
+		}
+		assert.Equal(t, 1, c)
+	}()
+
+	time.Sleep(time.Second)
+	err = watcher.Close()
+	assert.Nil(t, err)
+	wg.Wait()
+}

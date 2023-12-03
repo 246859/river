@@ -16,12 +16,12 @@ type Stats struct {
 func (db *DB) Stats() Stats {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
-
+	stat := db.data.Stat()
 	var stats Stats
 	stats.KeyNums = int64(db.index.Size())
 	stats.RecordNums = db.numOfRecord
-	stats.DataSize = db.data.Stat().SizeOfWal
-	stats.HintSize = db.hint.Stat().SizeOfWal
+	stats.DataSize = stat.SizeOfWal
+	stats.HintSize = stat.SizeOfWal
 
 	return stats
 }

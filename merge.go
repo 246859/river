@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/246859/river/entry"
 	"github.com/246859/river/index"
+	"github.com/246859/river/types"
 	"github.com/246859/river/wal"
 	"github.com/pkg/errors"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"time"
 )
 
 var (
@@ -439,4 +441,46 @@ func hasFinished(fwal *wal.Wal) (uint32, error) {
 
 	fid := binary.LittleEndian.Uint32(bytes)
 	return fid, nil
+}
+
+// it will continue listening the event of write events, and do merge when reaching the checkpoint.
+// this is a dead simple implementation, maybe can not meet your requirements, but db.Merge is public method,
+// so you can disable default checkpoint and use db.Merge by yourself at the right time.
+func doMergeAtCheckpoint(db *DB) {
+	watcher, _ := db.Watcher(PutEvent, DelEvent)
+	listen, _ := watcher.Listen()
+
+	var lastMergeT time.Time
+	for {
+		select {
+		case <-db.ctx.Done():
+			// db closed
+			return
+		case _, ok := <-listen:
+			// closed
+			if !ok {
+				return
+			}
+
+			// check db stats
+			stats := db.Stats()
+
+			// no need to merge
+			if stats.RecordNums < 10_000 && stats.DataSize < types.MB*10 {
+				continue
+			}
+
+			// reach the checkpoint
+			if float64(stats.RecordNums)/float64(stats.KeyNums) > db.option.MergeCheckpoint {
+				// 5 min after last merge
+				if time.Now().Sub(lastMergeT) < time.Minute*5 {
+					continue
+				}
+				if err := db.Merge(true); err != nil {
+					panic(err)
+				}
+				lastMergeT = time.Now()
+			}
+		}
+	}
 }
