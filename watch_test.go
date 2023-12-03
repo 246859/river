@@ -59,15 +59,15 @@ func TestDB_Watcher_Put_Del(t *testing.T) {
 		{K: []byte("foo3"), V: []byte("bar")},
 	}
 
+	watcher, err := db.Watcher()
+	assert.Nil(t, err)
+
 	for _, r := range rs {
 		err := db.Put(r.K, r.V, r.TTL)
 		assert.Nil(t, err)
 		err = db.Del(r.K)
 		assert.Nil(t, err)
 	}
-
-	watcher, err := db.Watcher()
-	assert.Nil(t, err)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -108,12 +108,6 @@ func TestDB_Watcher_Put_Del_Multi(t *testing.T) {
 		{K: []byte("foo3"), V: []byte("bar")},
 	}
 
-	for _, r := range rs {
-		err := db.Put(r.K, r.V, r.TTL)
-		assert.Nil(t, err)
-		err = db.Del(r.K)
-		assert.Nil(t, err)
-	}
 	var wg sync.WaitGroup
 	wg.Add(10)
 
@@ -134,6 +128,13 @@ func TestDB_Watcher_Put_Del_Multi(t *testing.T) {
 			t.Log("closed listener")
 			assert.Equal(t, len(rs)*2, i)
 		}()
+	}
+
+	for _, r := range rs {
+		err := db.Put(r.K, r.V, r.TTL)
+		assert.Nil(t, err)
+		err = db.Del(r.K)
+		assert.Nil(t, err)
 	}
 
 	time.Sleep(time.Second)
@@ -165,12 +166,6 @@ func TestDB_Watcher_BackUp(t *testing.T) {
 	}
 
 	target := filepath.Join(os.TempDir(), "test.tar.gz")
-
-	err = db.Backup(target)
-	assert.Nil(t, err)
-
-	err = db.Recover(target)
-	assert.Nil(t, err)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -210,6 +205,12 @@ func TestDB_Watcher_BackUp(t *testing.T) {
 		t.Log("closed listener")
 		assert.Equal(t, 1, i)
 	}()
+
+	err = db.Backup(target)
+	assert.Nil(t, err)
+
+	err = db.Recover(target)
+	assert.Nil(t, err)
 
 	time.Sleep(time.Second)
 
