@@ -150,7 +150,7 @@ func main() {
 
 ### batch operation
 
-batch operation has better performance than call `db.Put` or `db.Del` directly
+batch operation has better performance than call `db.Put` or `db.Del` directly in large amount of data
 
 ```go
 import (
@@ -279,42 +279,73 @@ import (
 	riverdb "github.com/246859/river"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
 func main() {
 	// open db
 	db, err := riverdb.Open(riverdb.DefaultOptions, riverdb.WithDir(filepath.Join(os.TempDir(), "example")))
+	defer db.Close()
 	if err != nil {
 		panic(err)
 	}
 
-	done := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	watcher, err := db.Watcher(riverdb.PutEvent)
+	if err != nil {
+		panic(err)
+	}
+
+	db.Put([]byte("hello world"), []byte("world"), 0)
+
 	go func() {
-		watch, err := db.Watch()
+		defer wg.Done()
+		listen, err := watcher.Listen()
 		if err != nil {
 			panic(err)
 		}
 
-		for event := range watch {
-			fmt.Printf("%+v\n", event)
+		for event := range listen {
+			fmt.Println(event)
 		}
-		done <- struct{}{}
 	}()
 
-	err = db.Put([]byte("1"), []byte("1"), 0)
+	time.Sleep(time.Second)
+	watcher.Close()
+
+	wg.Wait()
+}
+```
+
+
+
+### merge
+
+you can use `db.Merge` to proactively clean up redundant data in the database.
+
+```go
+import (
+	riverdb "github.com/246859/river"
+	"os"
+	"path/filepath"
+)
+
+func main() {
+	// open db
+	db, err := riverdb.Open(riverdb.DefaultOptions, riverdb.WithDir(filepath.Join(os.TempDir(), "example")))
+	defer db.Close()
 	if err != nil {
 		panic(err)
 	}
-	db.Put([]byte("2"), []byte("3"), 0)
-	db.Del([]byte("2"))
 
-	time.Sleep(time.Second * 2)
-	db.Close()
-	<-done
+	db.Merge(true)
 }
-
 ```
+
+set `Options.MergeCheckup=0` if you want to disable the default merge check up job.
 
 
 
