@@ -84,10 +84,24 @@ func OpenWithCtx(ctx context.Context, options Options, opts ...Option) (*DB, err
 	}
 
 	if db.option.WatchSize > 0 {
-		db.watcher = newWatcher(db.option.WatchSize, db.option.WatchEvents...)
-		db.watcher.clear()
-		// new goroutine to watching events
-		go db.watcher.watch(db.ctx)
+		pool, err := newWatcherPool(db.ctx, db.option.WatchSize, db.option.WatchEvents...)
+		if err != nil {
+			return nil, err
+		}
+		db.watcher = pool
+		db.wg.Add(1)
+		go func() {
+			defer db.wg.Done()
+			db.watcher.watch()
+		}()
+	}
+
+	if db.option.MergeCheckpoint > 0 {
+		db.wg.Add(1)
+		go func() {
+			defer db.wg.Done()
+			doMergeAtCheckpoint(db)
+		}()
 	}
 
 	return db, nil
@@ -113,9 +127,10 @@ type DB struct {
 	index index.Index
 	// mu ensures that only one goroutine can update data or index at a time
 	mu sync.RWMutex
+	wg sync.WaitGroup
 
-	// event watch
-	watcher *watcher
+	// event watcher
+	watcher *watcherPool
 
 	// merge operator
 	mergeOp *mergeOP
@@ -337,7 +352,9 @@ func (db *DB) Close() error {
 		return err
 	}
 
-	db.watcher.close()
+	db.watcher.Close()
+
+	db.wg.Wait()
 
 	// release dir lock
 	if err := db.unlockDir(); err != nil {

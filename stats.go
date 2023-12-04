@@ -14,7 +14,15 @@ type Stats struct {
 }
 
 func (db *DB) Stats() Stats {
-	db.mu.RLock()
+
+	if db.flag.Check(closed) {
+		return Stats{}
+	}
+
+	//
+	if !db.mu.TryRLock() {
+		return Stats{}
+	}
 	defer db.mu.RUnlock()
 
 	var stats Stats
