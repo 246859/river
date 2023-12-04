@@ -447,7 +447,7 @@ func hasFinished(fwal *wal.Wal) (uint32, error) {
 // this is a dead simple implementation, maybe can not meet your requirements, but db.Merge is public method,
 // so you can disable default checkpoint and use db.Merge by yourself at the right time.
 func doMergeAtCheckpoint(db *DB) {
-	watcher, _ := db.Watcher(PutEvent, DelEvent)
+	watcher, _ := db.Watcher("riverdb_merge_checkpoint_watcher", PutEvent, DelEvent)
 	listen, _ := watcher.Listen()
 
 	var lastMergeT time.Time
@@ -485,6 +485,8 @@ func doMergeAtCheckpoint(db *DB) {
 				}
 				lastMergeT = time.Now()
 			}
+
+			time.Sleep(time.Millisecond * 50)
 		}
 	}
 }

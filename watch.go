@@ -17,6 +17,25 @@ var (
 
 type EventType uint
 
+func (e EventType) String() string {
+	switch e {
+	case PutEvent:
+		return "PutEvent"
+	case DelEvent:
+		return "DelEvent"
+	case RollbackEvent:
+		return "RollbackEvent"
+	case MergeEvent:
+		return "MergeEvent"
+	case BackupEvent:
+		return "BackupEvent"
+	case RecoverEvent:
+		return "RecoverEvent"
+	default:
+		return fmt.Sprintf("%d", e)
+	}
+}
+
 // Event represents a push event
 type Event struct {
 	Type  EventType
@@ -45,7 +64,7 @@ func validEvent(et EventType) bool {
 }
 
 // Watcher returns a new event watcher with the given event type, if events is empty, it will apply db.Option
-func (db *DB) Watcher(events ...EventType) (*Watcher, error) {
+func (db *DB) Watcher(name string, events ...EventType) (*Watcher, error) {
 
 	if db.flag.Check(closed) {
 		return nil, ErrDBClosed
@@ -61,7 +80,7 @@ func (db *DB) Watcher(events ...EventType) (*Watcher, error) {
 		}
 	}
 
-	w := db.watcher.newWatcher(events...)
+	w := db.watcher.newWatcher(name, events...)
 	return w, nil
 }
 
@@ -104,11 +123,11 @@ type watcherPool struct {
 	done chan struct{}
 }
 
-func (w *watcherPool) newWatcher(ets ...EventType) *Watcher {
+func (w *watcherPool) newWatcher(name string, ets ...EventType) *Watcher {
 	if len(ets) == 0 {
 		ets = w.expectedEvent
 	}
-	wa := &Watcher{}
+	wa := &Watcher{name: name}
 	wa.watch = w
 	// chan buffer size a little greater than eventsize is to prevent to block watch goroutine if chan is full
 	wa.ch = make(chan *Event, w.chanSize+5)
@@ -150,7 +169,10 @@ func (w *watcherPool) push(e *Event) {
 // watch the events in the event queue, and notify the watcher in pool
 // it must be running in another goroutine, and it will return when db closed
 func (w *watcherPool) watch() {
+	var wg sync.WaitGroup
+
 	defer func() {
+		wg.Wait()
 		w.Close()
 	}()
 
@@ -159,27 +181,33 @@ func (w *watcherPool) watch() {
 		case <-w.ctx.Done():
 			return
 		default:
+			if len(w.pool) == 0 {
+				continue
+			}
+
 			event := w.pop()
 			if event == nil {
-				break
+				continue
 			}
 
 			// notify watcher in pool
 			for _, wa := range w.pool {
+				wg.Add(1)
+				go func(wa *Watcher) {
+					defer wg.Done()
+					if w.eventQueue == nil {
+						return
+					}
 
-				if w.eventQueue == nil {
-					return
-				}
+					if wa.closed || !wa.expected(event.Type) {
+						return
+					}
 
-				if wa.closed || !wa.expected(event.Type) {
-					continue
-				}
-
-				for len(wa.ch) >= w.chanSize {
-					fmt.Println("out", (<-wa.ch).Type)
-				}
-
-				wa.ch <- event
+					for len(wa.ch) >= w.chanSize {
+						<-wa.ch
+					}
+					wa.ch <- event
+				}(wa)
 			}
 		}
 	}
@@ -223,6 +251,11 @@ type Watcher struct {
 	ch            chan *Event
 	expectedEvent []EventType
 	closed        bool
+	name          string
+}
+
+func (w *Watcher) Name() string {
+	return w.name
 }
 
 func (w *Watcher) Listen() (<-chan *Event, error) {

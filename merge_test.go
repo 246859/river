@@ -212,19 +212,8 @@ func TestMerge_CheckPoint(t *testing.T) {
 		})
 	}
 
-	watcher, err := db.Watcher(MergeEvent)
+	watcher, err := db.Watcher("put_get", MergeEvent)
 	assert.Nil(t, err)
-
-	for _, r := range rs {
-		err := db.Put(r.K, r.V, r.TTL)
-		assert.Nil(t, err)
-	}
-
-	stats := db.Stats()
-
-	t.Log(stats.DataSize)
-	t.Log(stats.KeyNums)
-	t.Log(stats.RecordNums)
 
 	// listen the merge events
 	var wg sync.WaitGroup
@@ -244,7 +233,17 @@ func TestMerge_CheckPoint(t *testing.T) {
 		assert.Equal(t, 1, c)
 	}()
 
-	time.Sleep(time.Second)
+	for _, r := range rs {
+		err := db.Put(r.K, r.V, r.TTL)
+		assert.Nil(t, err)
+	}
+
+	stats := db.Stats()
+
+	t.Log(stats.DataSize)
+	t.Log(stats.KeyNums)
+	t.Log(stats.RecordNums)
+	time.Sleep(time.Second * 2)
 	err = watcher.Close()
 	assert.Nil(t, err)
 	wg.Wait()
