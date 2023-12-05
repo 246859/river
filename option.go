@@ -5,6 +5,7 @@ import (
 	"github.com/246859/river/index"
 	"github.com/246859/river/types"
 	"github.com/246859/river/wal"
+	"github.com/pkg/errors"
 	"path/filepath"
 )
 
@@ -28,6 +29,7 @@ var DefaultOptions = Options{
 	Compare:         index.DefaultCompare,
 	WatchSize:       2000,
 	WatchEvents:     []EventType{PutEvent, DelEvent},
+	Level:           ReadCommitted,
 	MergeCheckpoint: 0,
 }
 
@@ -52,10 +54,12 @@ type Options struct {
 	WatchEvents []EventType
 	// decide how to sort keys
 	Compare index.Compare
-	// manually gc after closed db to release memory used by index
-	ClosedGc bool
 	// check point of auto merge, disabled if is 0
 	MergeCheckpoint float64
+	// transaction isolation level
+	Level TxnLevel
+	// manually gc after closed db to release memory used by index
+	ClosedGc bool
 
 	dataDir  string
 	mergeDir string
@@ -64,11 +68,11 @@ type Options struct {
 
 func revise(opt Options) (Options, error) {
 	if opt.Dir == "" {
-		return opt, fmt.Errorf("db data dir must be specified")
+		return opt, errors.New("db data dir must be specified")
 	}
 
 	if opt.Compare == nil {
-		return opt, fmt.Errorf("key comparator must be specified")
+		return opt, errors.New("key comparator must be specified")
 	}
 
 	if opt.MaxSize <= 0 {
@@ -76,11 +80,15 @@ func revise(opt Options) (Options, error) {
 	}
 
 	if (int64(opt.BlockCache) * wal.MaxBlockSize) >= opt.MaxSize {
-		return opt, fmt.Errorf("block cache size should be less then max file size")
+		return opt, errors.New("block cache size should be less then max file size")
 	}
 
 	if opt.FsyncThreshold >= opt.MaxSize {
-		return opt, fmt.Errorf("sync threshold should be less than max file size")
+		return opt, errors.New("sync threshold should be less than max file size")
+	}
+
+	if opt.Level < ReadCommitted || opt.Level > Serializable {
+		return opt, errors.New("unsupported txn isolation level")
 	}
 
 	opt.dataDir = filepath.Join(opt.Dir, dataName)
@@ -141,5 +149,17 @@ func WithCompare(compare index.Compare) Option {
 func WithClosedGc(gc bool) Option {
 	return func(option *Options) {
 		option.ClosedGc = gc
+	}
+}
+
+func WithMergeCheckPoint(checkPoint float64) Option {
+	return func(option *Options) {
+		option.MergeCheckpoint = checkPoint
+	}
+}
+
+func WithTxnLevel(level TxnLevel) Option {
+	return func(option *Options) {
+		option.Level = level
 	}
 }

@@ -20,6 +20,24 @@ var (
 	ErrTxnConflict = errors.New("transaction is conflict")
 )
 
+type TxnLevel uint8
+
+func (t TxnLevel) String() string {
+	switch t {
+	case Serializable:
+		return "Serializable"
+	case ReadCommitted:
+		return "ReadCommitted"
+	default:
+		return "Unknown"
+	}
+}
+
+const (
+	ReadCommitted TxnLevel = 1 + iota
+	Serializable
+)
+
 func newTx(db *DB) (*tx, error) {
 	nodeTs := time.Now().UnixNano() % (1 << 10)
 	// nodeTs should be in [0, 1023]
@@ -63,11 +81,11 @@ type tx struct {
 	active     heaps.Heap[*Txn]
 	amu        sync.RWMutex
 	aCond      *sync.Cond
-	watiActive bool
+	waitActive bool
 
 	// record of committed txn
 	committed []*Txn
-	cmu       sync.Mutex
+	cmu       sync.RWMutex
 }
 
 func (tx *tx) newTs() int64 {
@@ -142,25 +160,35 @@ func (tx *tx) WaitActiveTxn(cb func() error) error {
 
 func (tx *tx) blockNewTxn() {
 	tx.amu.Lock()
-	tx.watiActive = true
+	tx.waitActive = true
 	tx.amu.Unlock()
 }
 
 func (tx *tx) releaseNewTxn() {
 	tx.amu.Lock()
-	tx.watiActive = false
+	tx.waitActive = false
 	tx.amu.Unlock()
 	tx.aCond.Broadcast()
 }
 
 func (tx *tx) begin(db *DB, readonly bool) *Txn {
 
-	// if is need to watiActive for condition
+	// if is need to wait Active for condition
 	tx.amu.RLock()
-	for tx.watiActive {
+	for tx.waitActive {
 		tx.aCond.Wait()
 	}
 	tx.amu.RUnlock()
+
+	// if level is Serializable, make sure all transactions run as synchronized,
+	// only one goroutine at a certain time can make updates to the database.
+	if tx.db.option.Level == Serializable {
+		if readonly {
+			tx.cmu.RLock()
+		} else {
+			tx.cmu.Lock()
+		}
+	}
 
 	txn := newTxn(db, readonly)
 	txn.id = tx.generateID()
@@ -188,13 +216,22 @@ func (tx *tx) discardTxn(txn *Txn, fail bool) {
 
 func (tx *tx) commit(txn *Txn) error {
 
+	level := tx.db.option.Level
+
 	if txn.readonly {
 		tx.discardTxn(txn, false)
+		if level == Serializable {
+			tx.cmu.RUnlock()
+		}
 		return nil
 	}
 
-	tx.cmu.Lock()
-	defer tx.cmu.Unlock()
+	if level == Serializable {
+		defer tx.cmu.Unlock()
+	} else {
+		tx.cmu.Lock()
+		defer tx.cmu.Unlock()
+	}
 
 	// conflict check
 	if tx.hasConflict(txn) {
@@ -255,33 +292,51 @@ func (tx *tx) commit(txn *Txn) error {
 
 func (tx *tx) rollback(txn *Txn) error {
 	db := txn.db
+	level := db.option.Level
 
-	if !txn.readonly {
-		if err := txn.pending.Flag(entry.TxnRollBackEntryType); err != nil {
+	if txn.readonly {
+		tx.discardTxn(txn, true)
+		if level == Serializable {
+			tx.cmu.RUnlock()
+		}
+		return nil
+	}
+
+	if level == ReadCommitted {
+		tx.cmu.Lock()
+		defer tx.cmu.Unlock()
+	}
+
+	// write a flag to mark this txn sequence was roll back
+	if err := txn.pending.Flag(entry.TxnRollBackEntryType); err != nil {
+		return err
+	}
+	tx.discardTxn(txn, true)
+
+	if level == Serializable {
+		tx.cmu.Unlock()
+	}
+
+	// notify watcher
+	if db.watcher != nil && db.watcher.expected(RollbackEvent) {
+		err := txn.pending.Iterate(RangeOptions{}, func(et entry.EType, hint index.Hint) error {
+			event := &Event{Value: hint.Key}
+			switch et {
+			case entry.DataEntryType:
+				event.Type = PutEvent
+			case entry.DeletedEntryType:
+				event.Type = DelEvent
+			default:
+				return nil
+			}
+			db.watcher.push(event)
+			return nil
+		})
+		if err != nil {
 			return err
 		}
-		tx.discardTxn(txn, true)
-
-		// notify watcher
-		if db.watcher != nil && db.watcher.expected(RollbackEvent) {
-			err := txn.pending.Iterate(RangeOptions{}, func(et entry.EType, hint index.Hint) error {
-				event := &Event{Value: hint.Key}
-				switch et {
-				case entry.DataEntryType:
-					event.Type = PutEvent
-				case entry.DeletedEntryType:
-					event.Type = DelEvent
-				default:
-					return nil
-				}
-				db.watcher.push(event)
-				return nil
-			})
-			if err != nil {
-				return err
-			}
-		}
 	}
+
 	return nil
 }
 
