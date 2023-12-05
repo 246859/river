@@ -271,3 +271,74 @@ func TestTxn_Mixed(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestTxn_Serializable(t *testing.T) {
+	opt := DefaultOptions
+	opt.Level = Serializable
+	db, closeDB, err := testDB(t.Name(), opt)
+	assert.Nil(t, err)
+	defer func() {
+		err := closeDB()
+		assert.Nil(t, err)
+	}()
+
+	type record struct {
+		k   []byte
+		v   []byte
+		ttl time.Duration
+	}
+
+	testkv := testRandKV()
+
+	var samples []record
+	for i := 0; i < 300; i++ {
+		samples = append(samples, record{
+			k:   testkv.testUniqueBytes(100),
+			v:   testkv.testBytes(10 * types.KB),
+			ttl: 0,
+		})
+	}
+
+	for _, sample := range samples {
+		err := db.Put(sample.k, sample.v, sample.ttl)
+		assert.Nil(t, err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	s := samples[100]
+	// txn1
+	go func() {
+		defer wg.Done()
+		err := db.Begin(func(txn *Txn) error {
+			value, err := txn.Get(s.k)
+			assert.Nil(t, err)
+
+			err = txn.Put(s.k, append(value, 1), 0)
+			assert.Nil(t, err)
+
+			time.Sleep(80 * time.Millisecond)
+			return nil
+		})
+		assert.Nil(t, err)
+	}()
+
+	go func() {
+		defer wg.Done()
+		time.Sleep(10 * time.Millisecond)
+		err := db.Begin(func(txn *Txn) error {
+			time.Sleep(200 * time.Millisecond)
+			assert.Nil(t, err)
+			value, err := txn.Get(s.k)
+			assert.Nil(t, err)
+
+			err = txn.Put(s.k, append(value, 1), 0)
+			assert.Nil(t, err)
+			return nil
+		})
+		assert.Nil(t, err)
+	}()
+
+	wg.Wait()
+}

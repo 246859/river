@@ -360,7 +360,11 @@ func (op *mergeOP) doWrite(eh entryhint) error {
 	db := op.db
 	hint, has := db.index.Get(eh.entry.Key)
 	// expired and delete or maybe has been written to new active file
-	if !has || hint.Fid != eh.pos.Fid || entry.IsExpired(hint.TTL) {
+	if !has ||
+		// skip overwritten entries
+		hint.Fid != eh.pos.Fid || hint.Block != eh.pos.Block || hint.Offset != eh.pos.Offset ||
+		// skip expired entries
+		entry.IsExpired(hint.TTL) {
 		return nil
 	}
 

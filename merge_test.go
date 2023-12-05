@@ -45,7 +45,7 @@ func testDB_Merge(t *testing.T) {
 	var redundantSamples []record
 	for i := 0; i < 300; i++ {
 		redundantSamples = append(redundantSamples, record{
-			k:   testkv.testUniqueBytes(100),
+			k:   []byte(fmt.Sprintf("%d", i)),
 			v:   testkv.testBytes(10 * types.KB),
 			ttl: 0,
 		})
@@ -81,13 +81,16 @@ func testDB_Merge(t *testing.T) {
 
 	for _, sample := range validSamples {
 		value, err := db.Get(sample.k)
+		if err != nil {
+			t.Log("key==>>>>", sample.k)
+		}
 		assert.Nil(t, err)
 		assert.EqualValues(t, value, sample.v)
 	}
 }
 
 func TestDB_Merge_1(t *testing.T) {
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 50; i++ {
 		t.Log(i)
 		testDB_Merge(t)
 		time.Sleep(100 * time.Millisecond)

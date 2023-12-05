@@ -19,7 +19,6 @@ func (db *DB) Stats() Stats {
 		return Stats{}
 	}
 
-	//
 	if !db.mu.TryRLock() {
 		return Stats{}
 	}
