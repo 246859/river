@@ -3,6 +3,7 @@ package riverdb
 import (
 	"github.com/246859/river/types"
 	"github.com/stretchr/testify/assert"
+	"io"
 	"sync"
 	"testing"
 	"time"
@@ -16,32 +17,10 @@ func TestTxn_Begin_Commit(t *testing.T) {
 		assert.Nil(t, err)
 	}()
 
-	txn, err := db.Begin(true)
+	err = db.Begin(func(txn *Txn) error {
+		return nil
+	})
 	assert.Nil(t, err)
-
-	err = txn.Commit()
-	assert.Nil(t, err)
-
-	err = txn.RollBack()
-	assert.ErrorIs(t, err, ErrTxnClosed)
-}
-
-func TestTxn_Begin_RollBack(t *testing.T) {
-	db, closeDB, err := testDB(t.Name(), DefaultOptions)
-	assert.Nil(t, err)
-	defer func() {
-		err := closeDB()
-		assert.Nil(t, err)
-	}()
-
-	txn, err := db.Begin(true)
-	assert.Nil(t, err)
-
-	err = txn.RollBack()
-	assert.Nil(t, err)
-
-	err = txn.Commit()
-	assert.ErrorIs(t, err, ErrTxnClosed)
 }
 
 func TestTxn_Put_Get(t *testing.T) {
@@ -55,52 +34,48 @@ func TestTxn_Put_Get(t *testing.T) {
 	testkv := testRandKV()
 	// put-commit
 	{
-		txn, err := db.Begin(false)
-		assert.Nil(t, err)
-
 		k, v := testkv.testUniqueBytes(10), testkv.testBytes(types.KB)
+		err := db.Begin(func(txn *Txn) error {
 
-		err = txn.Put(k, v, 0)
-		assert.Nil(t, err)
+			err = txn.Put(k, v, 0)
+			assert.Nil(t, err)
 
-		value, err := txn.Get(k)
-		assert.Nil(t, err)
-		assert.Equal(t, v, value)
+			value, err := txn.Get(k)
+			assert.Nil(t, err)
+			assert.Equal(t, v, value)
+
+			get, err := db.Get(k)
+			assert.ErrorIs(t, err, ErrKeyNotFound)
+			assert.Nil(t, get)
+
+			return nil
+		})
 
 		get, err := db.Get(k)
-		assert.ErrorIs(t, err, ErrKeyNotFound)
-		assert.Nil(t, get)
-
-		err = txn.Commit()
 		assert.Nil(t, err)
-
-		get, err = db.Get(k)
-		assert.Nil(t, nil)
 		assert.Equal(t, v, get)
 	}
 
 	// put-rollback
 	{
-		txn, err := db.Begin(false)
-		assert.Nil(t, err)
-
 		k, v := testkv.testUniqueBytes(10), testkv.testBytes(types.KB)
+		err := db.Begin(func(txn *Txn) error {
+			err = txn.Put(k, v, 0)
+			assert.Nil(t, err)
 
-		err = txn.Put(k, v, 0)
-		assert.Nil(t, err)
+			value, err := txn.Get(k)
+			assert.Nil(t, err)
+			assert.Equal(t, v, value)
 
-		value, err := txn.Get(k)
-		assert.Nil(t, err)
-		assert.Equal(t, v, value)
+			get, err := db.Get(k)
+			assert.ErrorIs(t, err, ErrKeyNotFound)
+			assert.Nil(t, get)
+
+			return io.EOF
+		})
+		assert.NotNil(t, err)
 
 		get, err := db.Get(k)
-		assert.ErrorIs(t, err, ErrKeyNotFound)
-		assert.Nil(t, get)
-
-		err = txn.RollBack()
-		assert.Nil(t, err)
-
-		get, err = db.Get(k)
 		assert.ErrorIs(t, err, ErrKeyNotFound)
 		assert.Nil(t, get)
 	}
@@ -113,10 +88,11 @@ func TestTxn_Readonly_1(t *testing.T) {
 		assert.Nil(t, err)
 	}()
 
-	txn, err := db.Begin(true)
-	assert.Nil(t, err)
-
-	err = txn.Put([]byte("1"), []byte("1"), 0)
+	err = db.View(func(txn *Txn) error {
+		err := txn.Put([]byte("1"), []byte("1"), 0)
+		assert.ErrorIs(t, err, ErrTxnReadonly)
+		return err
+	})
 	assert.ErrorIs(t, err, ErrTxnReadonly)
 }
 
@@ -156,14 +132,14 @@ func TestTxn_Readonly_2(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		go func() {
 			defer wg.Done()
-			txn, err := db.Begin(false)
-			assert.Nil(t, err)
-			for _, s := range samples {
-				get, err := txn.Get(s.k)
-				assert.Nil(t, err)
-				assert.Equal(t, s.v, get)
-			}
-			err = txn.Commit()
+			err := db.View(func(txn *Txn) error {
+				for _, s := range samples {
+					get, err := txn.Get(s.k)
+					assert.Nil(t, err)
+					assert.Equal(t, s.v, get)
+				}
+				return nil
+			})
 			assert.Nil(t, err)
 		}()
 	}
@@ -195,26 +171,26 @@ func TestTxn_UpdateOnly(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		go func() {
 			defer wg.Done()
-			txn, err := db.Begin(false)
-			var rs []record
-			for i := 0; i < 10; i++ {
-				rs = append(rs, record{
-					k:   testkv.testUniqueBytes(20),
-					v:   testkv.testBytes(types.KB * 10),
-					ttl: 0,
-				})
-			}
-			for _, r := range rs {
-				err := txn.Put(r.k, r.v, r.ttl)
-				assert.Nil(t, err)
-			}
+			err := db.Begin(func(txn *Txn) error {
+				var rs []record
+				for i := 0; i < 10; i++ {
+					rs = append(rs, record{
+						k:   testkv.testUniqueBytes(20),
+						v:   testkv.testBytes(types.KB * 10),
+						ttl: 0,
+					})
+				}
+				for _, r := range rs {
+					err := txn.Put(r.k, r.v, r.ttl)
+					assert.Nil(t, err)
+				}
 
-			err = txn.Commit()
+				mu.Lock()
+				records = append(records, rs...)
+				mu.Unlock()
+				return nil
+			})
 			assert.Nil(t, err)
-
-			mu.Lock()
-			records = append(records, rs...)
-			mu.Unlock()
 		}()
 	}
 
@@ -264,34 +240,32 @@ func TestTxn_Mixed(t *testing.T) {
 	// txn1
 	go func() {
 		defer wg.Done()
-		txn, err := db.Begin(false)
-		assert.Nil(t, err)
+		err := db.Begin(func(txn *Txn) error {
+			value, err := txn.Get(s.k)
+			assert.Nil(t, err)
 
-		value, err := txn.Get(s.k)
-		assert.Nil(t, err)
+			err = txn.Put(s.k, append(value, 1), 0)
+			assert.Nil(t, err)
 
-		err = txn.Put(s.k, append(value, 1), 0)
-		assert.Nil(t, err)
-
-		time.Sleep(80 * time.Millisecond)
-		err = txn.Commit()
+			time.Sleep(80 * time.Millisecond)
+			return nil
+		})
 		assert.Nil(t, err)
 	}()
 
 	go func() {
 		defer wg.Done()
 		time.Sleep(10 * time.Millisecond)
-		txn, err := db.Begin(false)
-		time.Sleep(200 * time.Millisecond)
+		err := db.Begin(func(txn *Txn) error {
+			time.Sleep(200 * time.Millisecond)
+			assert.Nil(t, err)
+			value, err := txn.Get(s.k)
+			assert.Nil(t, err)
 
-		assert.Nil(t, err)
-		value, err := txn.Get(s.k)
-		assert.Nil(t, err)
-
-		err = txn.Put(s.k, append(value, 1), 0)
-		assert.Nil(t, err)
-
-		err = txn.Commit()
+			err = txn.Put(s.k, append(value, 1), 0)
+			assert.Nil(t, err)
+			return nil
+		})
 		assert.ErrorIs(t, err, ErrTxnConflict)
 	}()
 

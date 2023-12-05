@@ -101,7 +101,7 @@ func (ba *Batch) writeAll(rs []Record, et entry.EType) error {
 			defer ba.wg.Done()
 
 			// start a txn
-			txn, err := ba.db.Begin(false)
+			txn, err := ba.db.beginTxn(false)
 			if err != nil {
 				return
 			}
@@ -241,7 +241,7 @@ func (b *batchTxn) write(record []Record, et entry.EType) error {
 }
 
 func (b *batchTxn) rollback() error {
-	return b.txn.RollBack()
+	return b.txn.rollback()
 }
 
 func (b *batchTxn) commit(needSync bool) error {
@@ -258,7 +258,7 @@ func (b *batchTxn) commit(needSync bool) error {
 		return err
 	}
 
-	if err := b.txn.Commit(); err != nil {
+	if err := b.txn.commit(); err != nil {
 		return err
 	}
 	b.ba.effected.Add(int64(len(es)))

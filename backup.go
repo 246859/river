@@ -28,32 +28,36 @@ func (db *DB) Backup(destpath string) error {
 	db.flag.Store(backing)
 	defer db.flag.Check(backing)
 
-	// check dir status
-	datadir := db.option.dataDir
-	_, err := os.Stat(datadir)
-	if err != nil {
-		return err
-	}
+	// backup after all active transactions done, make sure backup records is complete.
+	return db.tx.WaitActiveTxn(func() error {
+		// check dir status
+		datadir := db.option.dataDir
+		_, err := os.Stat(datadir)
+		if err != nil {
+			return err
+		}
 
-	// rotate data wal file
-	db.mu.Lock()
-	if err := db.data.Rotate(); err != nil {
+		// rotate data wal file
+		db.mu.Lock()
+		if err := db.data.Rotate(); err != nil {
+			db.mu.Unlock()
+			return err
+		}
 		db.mu.Unlock()
-		return err
-	}
-	db.mu.Unlock()
 
-	// tar gzip archive
-	err = tarCompress(datadir, destpath)
-	if err != nil {
-		return err
-	}
+		// tar gzip archive
+		err = tarCompress(datadir, destpath)
+		if err != nil {
+			return err
+		}
 
-	// notify watcher
-	if db.watcher != nil && db.watcher.expected(BackupEvent) {
-		db.watcher.push(&Event{Type: BackupEvent, Value: destpath})
-	}
-	return nil
+		// notify watcher
+		if db.watcher != nil && db.watcher.expected(BackupEvent) {
+			db.watcher.push(&Event{Type: BackupEvent, Value: destpath})
+		}
+
+		return nil
+	})
 }
 
 // Recover recovers wal files from specified targz archive.

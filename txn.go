@@ -41,6 +41,8 @@ func newTx(db *DB) (*tx, error) {
 		}},
 	}
 
+	tx.aCond = sync.NewCond(tx.amu.RLocker())
+
 	tx.ts.Store(time.Now().UnixNano())
 
 	return tx, nil
@@ -58,8 +60,10 @@ type tx struct {
 	node *snowflake.Node
 
 	// record of active transactions
-	active heaps.Heap[*Txn]
-	amu    sync.Mutex
+	active     heaps.Heap[*Txn]
+	amu        sync.RWMutex
+	aCond      *sync.Cond
+	watiActive bool
 
 	// record of committed txn
 	committed []*Txn
@@ -114,7 +118,50 @@ func (tx *tx) cleanCommitted() {
 	}
 }
 
+// WaitActiveTxn waits for all active transactions to be committed or rolled back,
+// and in this period block new transaction beginning.
+func (tx *tx) WaitActiveTxn(cb func() error) error {
+	tx.blockNewTxn()
+	tx.amu.RLock()
+
+	defer func() {
+		tx.amu.RUnlock()
+		tx.releaseNewTxn()
+	}()
+
+	for tx.active.Size() > 0 {
+		tx.aCond.Wait()
+	}
+
+	if err := cb(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (tx *tx) blockNewTxn() {
+	tx.amu.Lock()
+	tx.watiActive = true
+	tx.amu.Unlock()
+}
+
+func (tx *tx) releaseNewTxn() {
+	tx.amu.Lock()
+	tx.watiActive = false
+	tx.amu.Unlock()
+	tx.aCond.Broadcast()
+}
+
 func (tx *tx) begin(db *DB, readonly bool) *Txn {
+
+	// if is need to watiActive for condition
+	tx.amu.RLock()
+	for tx.watiActive {
+		tx.aCond.Wait()
+	}
+	tx.amu.RUnlock()
+
 	txn := newTxn(db, readonly)
 	txn.id = tx.generateID()
 	txn.startedTs = tx.newTs()
@@ -135,6 +182,8 @@ func (tx *tx) discardTxn(txn *Txn, fail bool) {
 	}
 	txn.discard(fail)
 	tx.amu.Unlock()
+
+	tx.aCond.Broadcast()
 }
 
 func (tx *tx) commit(txn *Txn) error {
@@ -206,11 +255,14 @@ func (tx *tx) commit(txn *Txn) error {
 
 func (tx *tx) rollback(txn *Txn) error {
 	db := txn.db
-	// notify watcher
+
 	if !txn.readonly {
 		if err := txn.pending.Flag(entry.TxnRollBackEntryType); err != nil {
 			return err
 		}
+		tx.discardTxn(txn, true)
+
+		// notify watcher
 		if db.watcher != nil && db.watcher.expected(RollbackEvent) {
 			err := txn.pending.Iterate(RangeOptions{}, func(et entry.EType, hint index.Hint) error {
 				event := &Event{Value: hint.Key}
@@ -230,7 +282,6 @@ func (tx *tx) rollback(txn *Txn) error {
 			}
 		}
 	}
-	tx.discardTxn(txn, true)
 	return nil
 }
 
@@ -272,20 +323,45 @@ type Txn struct {
 	closed bool
 }
 
-// Begin begins a new transaction
-func (db *DB) Begin(readonly bool) (*Txn, error) {
+func (db *DB) beginTxn(readonly bool) (*Txn, error) {
 	if db.flag.Check(closed) {
 		return nil, ErrDBClosed
 	}
-	db.opmu.Lock()
-	defer db.opmu.Unlock()
 
 	return db.tx.begin(db, readonly), nil
 }
 
-// Commit once a transaction committed successfully, its affects will act on database forever.
+// View begin a read-only transaction
+func (db *DB) View(fn func(txn *Txn) error) error {
+	txn, err := db.beginTxn(true)
+	if err != nil {
+		return err
+	}
+	defer txn.rollback()
+	if err := fn(txn); err != nil {
+		return err
+	}
+
+	return txn.commit()
+}
+
+// Begin begins a read-write transaction
+func (db *DB) Begin(fn func(txn *Txn) error) error {
+	txn, err := db.beginTxn(false)
+	if err != nil {
+		return err
+	}
+	defer txn.rollback()
+	if err := fn(txn); err != nil {
+		return err
+	}
+
+	return txn.commit()
+}
+
+// commit once a transaction committed successfully, its affects will act on database forever.
 // if crashes, db will reload transaction data from wal and update into memory index.
-func (txn *Txn) Commit() error {
+func (txn *Txn) commit() error {
 	if txn.closed {
 		return ErrTxnClosed
 	}
@@ -297,11 +373,11 @@ func (txn *Txn) Commit() error {
 	return txn.db.tx.commit(txn)
 }
 
-// RollBack could promise consistence of database.
+// rollback could promise consistence of database.
 // if transaction has been committed successfully, it will return ErrTxnClosed and be ignored,
-// otherwise RollBack will write a flag record to make sure data written in this transaction will never be seen,
+// otherwise rollback will write a flag record to make sure data written in this transaction will never be seen,
 // then discard this transaction.
-func (txn *Txn) RollBack() error {
+func (txn *Txn) rollback() error {
 	if txn.closed {
 		return ErrTxnClosed
 	}
