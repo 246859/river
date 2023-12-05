@@ -78,8 +78,6 @@ func TestBatch_WriteAll(t *testing.T) {
 	err = batch.Flush()
 	assert.Nil(t, err)
 
-	assert.EqualValues(t, rslen, batch.Effected())
-
 	for _, r := range rs {
 		value, err := db.Get(r.K)
 		assert.Nil(t, err)
@@ -135,7 +133,6 @@ func TestBatch_DeleteAll(t *testing.T) {
 		assert.Nil(t, value)
 	}
 
-	assert.EqualValues(t, 1100, batch.Effected())
 }
 
 func TestBatch_WriteAll_Fragment(t *testing.T) {
@@ -174,7 +171,49 @@ func TestBatch_WriteAll_Fragment(t *testing.T) {
 	err = batch.Flush()
 	assert.Nil(t, err)
 
-	assert.EqualValues(t, 10000, batch.Effected())
+	for _, sample := range samples {
+		value, err := db.Get(sample.K)
+		assert.Nil(t, err)
+		assert.EqualValues(t, sample.V, value)
+	}
+}
+
+func TestBatch_Cut(t *testing.T) {
+	opt := DefaultOptions
+	opt.BlockCache = 0
+	opt.MaxSize = types.MB
+	opt.FsyncThreshold = 100 * types.KB
+
+	db, closeDB, err := testDB(t.Name(), opt)
+	assert.Nil(t, err)
+	defer func() {
+		err := closeDB()
+		t.Log(err)
+		assert.Nil(t, err)
+	}()
+
+	// make sure key is unique
+	testkv := testRandKV()
+
+	var samples []Record
+	for i := 0; i < 1000; i++ {
+		samples = append(samples, Record{
+			K:   testkv.testUniqueBytes(100),
+			V:   testkv.testBytes(10 * types.KB),
+			TTL: 0,
+		})
+	}
+
+	batch, err := db.Batch(BatchOption{
+		Size:        500,
+		SyncOnFlush: true,
+	})
+
+	err = batch.WriteAll(samples)
+	assert.Nil(t, err)
+
+	err = batch.Flush()
+	assert.Nil(t, err)
 
 	for _, sample := range samples {
 		value, err := db.Get(sample.K)

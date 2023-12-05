@@ -4,9 +4,10 @@ import (
 	"github.com/246859/river/entry"
 	"github.com/246859/river/index"
 	"github.com/246859/river/pkg/str"
+	"github.com/246859/river/wal"
 	"github.com/pkg/errors"
+	"slices"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -53,34 +54,13 @@ type Batch struct {
 	opt BatchOption
 
 	mu sync.Mutex
-	wg sync.WaitGroup
-
-	err      atomic.Value
-	effected atomic.Int64
 
 	pendingPool sync.Pool
 
 	closed bool
 }
 
-// Error returns the error occurred in the batch operation
-func (ba *Batch) Error() error {
-	val := ba.err.Load()
-	if val == nil {
-		return nil
-	}
-	return val.(error)
-}
-
-// Effected returns how many records has been effected
-func (ba *Batch) Effected() int64 {
-	return ba.effected.Load()
-}
-
 func (ba *Batch) writeAll(rs []Record, et entry.EType) error {
-	if err := ba.Error(); err != nil {
-		return err
-	}
 
 	lrs := int64(len(rs))
 	for lrs > 0 {
@@ -95,40 +75,43 @@ func (ba *Batch) writeAll(rs []Record, et entry.EType) error {
 			lrs -= ba.opt.Size
 		}
 
-		// run a new goroutine to handle the batch in batchTxn
-		ba.wg.Add(1)
-		go func() {
-			defer ba.wg.Done()
-
-			// start a txn
-			txn, err := ba.db.beginTxn(false)
-			if err != nil {
-				return
+		var estimatedSize int64
+		for i, record := range batchRecord {
+			estimatedSize += wal.EstimateBlockSize(int64(entry.MaxHeaderSize + len(record.K) + len(record.V)))
+			// if this batch is reach to the max size, cut it.
+			if estimatedSize >= int64(float64(ba.db.option.MaxSize)*0.92) {
+				rs = slices.Insert(rs, 0, batchRecord[i:]...)
+				lrs += int64(len(batchRecord) - i)
+				batchRecord = batchRecord[:i]
+				break
 			}
+		}
 
-			bt := batchTxn{txn: txn, ba: ba}
-			// get pending buffer from pool
-			bt.pendingBuf = ba.pendingPool.Get().(map[string]*entry.Entry)
-			defer func() {
-				clear(bt.pendingBuf)
-				ba.pendingPool.Put(bt.pendingBuf)
-			}()
+		// start a txn
+		txn, err := ba.db.beginTxn(false)
+		if err != nil {
+			return err
+		}
 
-			if err = bt.write(batchRecord, et); err != nil {
-				ba.err.Store(err)
-				_ = bt.rollback()
-				return
-			}
+		bt := batchTxn{txn: txn, ba: ba}
+		// get pending buffer from pool
+		bt.pendingBuf = ba.pendingPool.Get().(map[string]*entry.Entry)
 
-			if err = bt.commit(ba.opt.SyncPerBatch); err != nil {
-				ba.err.Store(err)
-				_ = bt.rollback()
-				return
-			}
-		}()
+		if err = bt.write(batchRecord, et); err != nil {
+			_ = bt.rollback()
+			return err
+		}
+
+		if err = bt.commit(ba.opt.SyncPerBatch); err != nil {
+			_ = bt.rollback()
+			return err
+		}
+
+		clear(bt.pendingBuf)
+		ba.pendingPool.Put(bt.pendingBuf)
 	}
 
-	return ba.Error()
+	return nil
 }
 
 // WriteAll writes all given records to db in batchTxn
@@ -171,7 +154,6 @@ func (ba *Batch) DeleteAll(keys []Key) error {
 func (ba *Batch) Flush() error {
 	ba.mu.Lock()
 	defer ba.mu.Unlock()
-	ba.wg.Wait()
 	ba.closed = true
 
 	if ba.opt.SyncOnFlush {
@@ -181,7 +163,7 @@ func (ba *Batch) Flush() error {
 		}
 	}
 
-	return ba.Error()
+	return nil
 }
 
 // batchTxn wrap Txn to perform batch operations
@@ -261,6 +243,5 @@ func (b *batchTxn) commit(needSync bool) error {
 	if err := b.txn.commit(); err != nil {
 		return err
 	}
-	b.ba.effected.Add(int64(len(es)))
 	return nil
 }
