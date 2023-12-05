@@ -164,6 +164,7 @@ func TestMerge_CheckPoint(t *testing.T) {
 	// watch merge event
 	opt := DefaultOptions
 	opt.WatchSize = 30000
+	opt.MergeCheckpoint = 3.5
 	opt.WatchEvents = append(opt.WatchEvents, MergeEvent)
 	db, closeDB, err := testDB(t.Name(), opt)
 	assert.Nil(t, err)
