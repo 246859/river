@@ -121,9 +121,9 @@ simplely use transaction by `Begin`, `Commit`, `RollBack` APIs.
 
 ```go
 import (
-	"errors"
 	"fmt"
 	riverdb "github.com/246859/river"
+	"strings"
 )
 
 func main() {
@@ -133,19 +133,27 @@ func main() {
 		panic(err)
 	}
 	defer db.Close()
-	txn, err := db.Begin(true)
-	if err != nil {
-		panic(err)
-	}
-	_, err = txn.Get([]byte("notfund"))
-	if errors.Is(err, riverdb.ErrKeyNotFound) {
-		fmt.Println("key not found")
-	}else {
-		txn.RollBack()
-	}
-	txn.Commit()
-}
 
+	// read write transactions
+	db.Begin(func(txn *riverdb.Txn) error {
+		for i := 0; i < 10; i++ {
+			db.Put([]byte(strings.Repeat("a", i+1)), []byte(strings.Repeat("a", i+1)), 0)
+		}
+		return nil
+	})
+
+	// read only transactions
+	db.View(func(txn *riverdb.Txn) error {
+		for i := 0; i < 10; i++ {
+			get, err := db.Get([]byte(strings.Repeat("a", i)))
+			if err != nil {
+				return err
+			}
+			fmt.Println(string(get))
+		}
+		return nil
+	})
+}
 ```
 
 ### batch operation
