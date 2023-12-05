@@ -211,9 +211,6 @@ func main() {
 	if err := batch.Flush(); err != nil {
 		panic(err)
 	}
-
-	// 2000
-	fmt.Println(batch.Effected())
 }
 ```
 
