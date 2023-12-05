@@ -222,7 +222,7 @@ func (w *Wal) Write(data []byte) (ChunkPos, error) {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
-	estimateSize := estimateBlockSize(int64(len(data)))
+	estimateSize := EstimateBlockSize(int64(len(data)))
 
 	// data too large to hold in single wal file
 	if estimateSize > w.option.MaxFileSize {
@@ -255,7 +255,7 @@ func (w *Wal) WriteAll(datas [][]byte, needSync bool) ([]ChunkPos, error) {
 
 	var estimatesize int64
 	for _, data := range datas {
-		estimatesize += estimateBlockSize(int64(len(data)))
+		estimatesize += EstimateBlockSize(int64(len(data)))
 	}
 
 	// data too large to hold in single wal file

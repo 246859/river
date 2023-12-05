@@ -29,7 +29,7 @@ func (p *Pending) Write(data []byte) error {
 		return ErrDataExceedFile
 	}
 
-	p.pendingSize += estimateBlockSize(int64(len(data)))
+	p.pendingSize += EstimateBlockSize(int64(len(data)))
 	p.pendingBytes = append(p.pendingBytes, data)
 
 	return nil
