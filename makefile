@@ -5,7 +5,7 @@ bench:
 	go test -v -bench . -run db_bench_test.go
 
 test:
-	go test -v ./...
+	go test -v ./... -count=1
 
 
 build:
