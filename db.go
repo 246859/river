@@ -157,90 +157,31 @@ type DB struct {
 // Get returns value match the given key, if it expired or not found
 // db will return ErrKeyNotFound. nil Key is not allowed.
 func (db *DB) Get(key Key) (Value, error) {
-	txn, err := db.Begin(true)
-	if err != nil {
-		return nil, err
-	}
-	// you'd better call Rollback after transaction begins
-	defer txn.RollBack()
-	value, err := txn.Get(key)
-	if err != nil {
-		return value, err
-	}
-	if err := txn.Commit(); err != nil {
-		return nil, err
-	}
-	return value, nil
-}
-
-// Put
-// puts a key-value pair into db, overwrite value if key already exists.
-// nil key is invalid, but nil value is allowed, it will be overwritten to empty []byte.
-// if tll == 0, key will be persisted, or ttl < 0, key will apply the previous ttl.
-func (db *DB) Put(key Key, value Value, ttl time.Duration) error {
-	txn, err := db.Begin(false)
-	if err != nil {
-		return err
-	}
-	defer txn.RollBack()
-	if err := txn.Put(key, value, ttl); err != nil {
-		return err
-	}
-	if err := txn.Commit(); err != nil {
-		return err
-	}
-	return nil
-}
-
-// Del remove the key-value pair match the give key from db.
-// it will return nil if key not exist
-func (db *DB) Del(key Key) error {
-	txn, err := db.Begin(false)
-	if err != nil {
-		return err
-	}
-	defer txn.RollBack()
-	if err := txn.Del(key); err != nil {
-		return err
-	}
-	if err := txn.Commit(); err != nil {
-		return err
-	}
-	return nil
-}
-
-// Expire update ttl of the specified key
-// if ttl <= 0, the key will never expired
-func (db *DB) Expire(key Key, ttl time.Duration) error {
-	txn, err := db.Begin(false)
-	if err != nil {
-		return err
-	}
-	defer txn.RollBack()
-	if err := txn.Expire(key, ttl); err != nil {
-		return err
-	}
-	if err := txn.Commit(); err != nil {
-		return err
-	}
-	return nil
+	var value Value
+	err := db.View(func(txn *Txn) error {
+		v, err := txn.Get(key)
+		if err != nil {
+			return err
+		}
+		value = v
+		return nil
+	})
+	return value, err
 }
 
 // TTL returns left live time of the specified key
 func (db *DB) TTL(key Key) (time.Duration, error) {
-	txn, err := db.Begin(true)
-	if err != nil {
-		return 0, err
-	}
-	defer txn.RollBack()
-	ttl, err := txn.TTL(key)
-	if err != nil {
-		return ttl, err
-	}
-	if err := txn.Commit(); err != nil {
-		return 0, err
-	}
-	return ttl, nil
+	var ttl time.Duration
+	err := db.View(func(txn *Txn) error {
+		txnTTl, err := txn.TTL(key)
+		if err != nil {
+			return err
+		}
+		ttl = txnTTl
+		return nil
+	})
+
+	return ttl, err
 }
 
 // RangeOptions is alias of index.RangeOption
@@ -249,18 +190,35 @@ type RangeOptions = index.RangeOption
 // Range iterates over all the keys that match the given RangeOption
 // and call handler for each key-value
 func (db *DB) Range(option RangeOptions, handler RangeHandler) error {
-	txn, err := db.Begin(true)
-	if err != nil {
-		return err
-	}
-	defer txn.RollBack()
-	if err := txn.Range(option, handler); err != nil {
-		return err
-	}
-	if err := txn.Commit(); err != nil {
-		return err
-	}
-	return nil
+	return db.View(func(txn *Txn) error {
+		return txn.Range(option, handler)
+	})
+}
+
+// Put
+// puts a key-value pair into db, overwrite value if key already exists.
+// nil key is invalid, but nil value is allowed, it will be overwritten to empty []byte.
+// if tll == 0, key will be persisted, or ttl < 0, key will apply the previous ttl.
+func (db *DB) Put(key Key, value Value, ttl time.Duration) error {
+	return db.Begin(func(txn *Txn) error {
+		return txn.Put(key, value, ttl)
+	})
+}
+
+// Del remove the key-value pair match the give key from db.
+// it will return nil if key not exist
+func (db *DB) Del(key Key) error {
+	return db.Begin(func(txn *Txn) error {
+		return txn.Del(key)
+	})
+}
+
+// Expire update ttl of the specified key
+// if ttl <= 0, the key will never expired
+func (db *DB) Expire(key Key, ttl time.Duration) error {
+	return db.Begin(func(txn *Txn) error {
+		return txn.Expire(key, ttl)
+	})
 }
 
 // Purge remove all entries from data wal

@@ -1,10 +1,9 @@
 package riverdb
 
 import (
+	"fmt"
 	"github.com/246859/river/types"
 	"github.com/stretchr/testify/assert"
-	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -95,7 +94,7 @@ func TestDB_Merge_1(t *testing.T) {
 	}
 }
 
-func TestDB_Merge_2(t *testing.T) {
+func TestDB_Merge_Txn_Truncate(t *testing.T) {
 	db, closeDB, err := testDB(t.Name(), DefaultOptions)
 	assert.Nil(t, err)
 	defer func() {
@@ -103,87 +102,61 @@ func TestDB_Merge_2(t *testing.T) {
 		assert.Nil(t, err)
 	}()
 
-	type record struct {
-		k   []byte
-		v   []byte
-		ttl time.Duration
-	}
-
 	testkv := testRandKV()
 
-	var samples []record
-	for i := 0; i < 300; i++ {
-		samples = append(samples, record{
-			k:   testkv.testUniqueBytes(100),
-			v:   testkv.testBytes(10 * types.KB),
-			ttl: 0,
-		})
-	}
-
-	for _, sample := range samples {
-		err := db.Put(sample.k, sample.v, sample.ttl)
-		assert.Nil(t, err)
-	}
-
-	// redundant records
-	for _, sample := range samples[:100] {
-		err := db.Del(sample.k)
-		assert.Nil(t, err)
-	}
-
-	var records []record
-	var mu sync.Mutex
+	var rs []Record
+	var rsmu sync.Mutex
 	var wg sync.WaitGroup
-	wg.Add(22)
+	wg.Add(11)
 
-	for i := 0; i < 20; i++ {
-		i := i
-		go func() {
-			t.Log("writing", i)
+	for i := 0; i < 10; i++ {
+		go func(gid int) {
 			defer wg.Done()
-			var samples1 []record
-			for i := 0; i < 100; i++ {
-				samples1 = append(samples1, record{
-					k:   testkv.testUniqueBytes(100),
-					v:   testkv.testBytes(10 * types.KB),
-					ttl: 0,
-				})
-			}
-
-			for _, sample := range samples1 {
-				err := db.Put(sample.k, sample.v, sample.ttl)
+			time.Sleep(time.Duration(gid) * 500 * time.Microsecond)
+			err := db.Begin(func(txn *Txn) error {
+				t.Logf("go-%d writing", gid)
 				assert.Nil(t, err)
-			}
+				for i := 0; i < 10; i++ {
+					r := Record{
+						K:   []byte(fmt.Sprintf("%d-%d-%s", gid, i, testkv.testUniqueBytes(20))),
+						V:   testkv.testBytes(1024),
+						TTL: 0,
+					}
+					err := txn.Put(r.K, r.V, r.TTL)
+					assert.Nil(t, err)
+					t.Logf("go-%d-%d --> fid %d", gid, i, db.data.ActiveFid())
 
-			mu.Lock()
-			records = append(records, samples1...)
-			mu.Unlock()
-		}()
+					rsmu.Lock()
+					rs = append(rs, r)
+					rsmu.Unlock()
+				}
+				t.Logf("go-%d finished", gid)
+				assert.Nil(t, err)
+
+				return nil
+			})
+			assert.Nil(t, err)
+		}(i)
 	}
 
 	go func() {
 		defer wg.Done()
-		t.Log("backing")
-		err := db.Backup(filepath.Join(os.TempDir(), "test.tar.gz"))
+		time.Sleep(300 * time.Microsecond)
+		t.Log("<<< merge begin >>>")
+		err := db.Merge(true)
 		assert.Nil(t, err)
-	}()
-
-	go func() {
-		defer wg.Done()
-		t.Log("merging")
-		err = db.Merge(true)
-		assert.Nil(t, err)
+		t.Log("<<< merge finished >>>")
 	}()
 
 	wg.Wait()
 
-	assert.Equal(t, 20*100+200, db.index.Size())
-
-	records = append(records, samples[100:]...)
-	for _, sample := range records {
-		value, err := db.Get(sample.k)
+	for _, r := range rs {
+		value, err := db.Get(r.K)
 		assert.Nil(t, err)
-		assert.EqualValues(t, value, sample.v)
+		if err != nil {
+			t.Log(r.K)
+		}
+		assert.EqualValues(t, r.V, value)
 	}
 }
 
@@ -191,6 +164,7 @@ func TestMerge_CheckPoint(t *testing.T) {
 	// watch merge event
 	opt := DefaultOptions
 	opt.WatchSize = 30000
+	opt.MergeCheckpoint = 3.5
 	opt.WatchEvents = append(opt.WatchEvents, MergeEvent)
 	db, closeDB, err := testDB(t.Name(), opt)
 	assert.Nil(t, err)

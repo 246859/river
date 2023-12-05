@@ -38,31 +38,43 @@ func (db *DB) Merge(domerge bool) error {
 	db.flag.Store(merging)
 	defer db.flag.Revoke(merging)
 
-	db.mu.Lock()
+	var lastActiveId uint32
 
-	// return if db data is empty
-	if db.data.IsEmpty() {
+	// waiting for active transactions to be done and block new transactions,
+	// to avoid situations of transactions truncated by Rotate
+	err := db.tx.WaitActiveTxn(func() error {
+		db.mu.Lock()
+
+		// return if db data is empty
+		if db.data.IsEmpty() {
+			db.mu.Unlock()
+			return nil
+		}
+
+		// record last active id before rotate
+		lastActiveId = db.data.ActiveFid()
+
+		// rotate open a new wal file to write new data
+		if err := db.data.Rotate(); err != nil {
+			db.mu.Unlock()
+			return err
+		}
+
+		// then read old data from immutable file, due to no possibility of writing conflicts occurring
+		// so no need to lock db
 		db.mu.Unlock()
+
 		return nil
-	}
+	})
 
-	// record last active id before rotate
-	lastActiveId := db.data.ActiveFid()
-
-	// rotate open a new wal file to write new data
-	if err := db.data.Rotate(); err != nil {
-		db.mu.Unlock()
+	if err != nil {
 		return err
 	}
 
-	// then read old data from immutable file, due to no possibility of writing conflicts occurring
-	// so no need to lock db
-	db.mu.Unlock()
-
 	// reload op
 	op := db.mergeOp
-	err := op.reload()
-	if err != nil {
+
+	if err := op.reload(); err != nil {
 		return err
 	}
 
