@@ -6,190 +6,135 @@ import (
 	"testing"
 )
 
-func benchmarkDB_Put(b *testing.B, db *DB, testkv *randKV, vsize int) {
+func testDB_Bench_Get(b *testing.B, datanum int) {
+
+	db, closeDB, err := testDB(b.Name(), DefaultOptions)
+	if err != nil {
+		panic(err)
+	}
+	testkv := testRandKV()
+
+	b.Cleanup(func() {
+		if err := closeDB(); err != nil {
+			panic(err)
+		}
+	})
+
+	var samples []Record
+	for i := 0; i < datanum; i++ {
+		samples = append(samples, Record{
+			K:   testkv.testUniqueBytes(100),
+			V:   testkv.testBytes(types.KB),
+			TTL: 0,
+		})
+	}
+
+	batch, err := db.Batch(BatchOption{
+		Size:        int64(datanum / 20),
+		SyncOnFlush: true,
+	})
+	assert.Nil(b, err)
+
+	err = batch.WriteAll(samples)
+	assert.Nil(b, err)
+
 	b.ResetTimer()
 	b.ReportAllocs()
-
 	for i := 0; i < b.N; i++ {
-		err := db.Put(testkv.testBytes(30), testkv.testBytes(vsize), 0)
+		s := samples[i%datanum]
+		_, err := db.Get(s.K)
 		assert.Nil(b, err)
 	}
 }
 
-func benchmarkDB_Get(b *testing.B, db *DB, testkv *randKV) {
+func testDB_Bench_Put(b *testing.B, datanum int, datasize int) {
+	db, closeDB, err := testDB(b.Name(), DefaultOptions)
+	if err != nil {
+		panic(err)
+	}
+	testkv := testRandKV()
+
+	b.Cleanup(func() {
+		if err := closeDB(); err != nil {
+			panic(err)
+		}
+	})
+
+	var samples []Record
+	for i := 0; i < datanum; i++ {
+		samples = append(samples, Record{
+			K:   testkv.testUniqueBytes(100),
+			V:   testkv.testBytes(datasize),
+			TTL: 0,
+		})
+	}
+
 	b.ResetTimer()
 	b.ReportAllocs()
-
 	for i := 0; i < b.N; i++ {
-		db.Get(testkv.testBytes(30))
-	}
-}
-
-func benchmarkDB_Del(b *testing.B, db *DB, testkv *randKV) {
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for i := 0; i < b.N; i++ {
-		db.Del(testkv.testBytes(30))
-	}
-}
-
-func BenchmarkDB_B(b *testing.B) {
-	db, closeDB, err := testDB("river-bench", DefaultOptions)
-	if err != nil {
-		panic(err)
-	}
-	testkv := testRandKV()
-
-	b.Cleanup(func() {
-		if err := closeDB(); err != nil {
-			panic(err)
+		for i := 0; i < datanum; i++ {
+			err := db.Put(samples[i].K, samples[i].V, samples[i].TTL)
+			assert.Nil(b, err)
 		}
-	})
-
-	b.Run("benchmarkDB_Put_value_16B", func(b *testing.B) {
-		benchmarkDB_Put(b, db, testkv, types.B*16)
-	})
-
-	b.Run("benchmarkDB_Put_value_64B", func(b *testing.B) {
-		benchmarkDB_Put(b, db, testkv, types.B*64)
-	})
-
-	b.Run("benchmarkDB_Put_value_128B", func(b *testing.B) {
-		benchmarkDB_Put(b, db, testkv, types.B*128)
-	})
-
-	b.Run("benchmarkDB_Put_value_256B", func(b *testing.B) {
-		benchmarkDB_Put(b, db, testkv, types.B*256)
-	})
-
-	b.Run("benchmarkDB_Put_value_512B", func(b *testing.B) {
-		benchmarkDB_Put(b, db, testkv, types.B*512)
-	})
-
-	b.Run("benchmarkDB_Get_B", func(b *testing.B) {
-		benchmarkDB_Get(b, db, testkv)
-	})
-
-	b.Run("benchmarkDB_Del_B", func(b *testing.B) {
-		benchmarkDB_Del(b, db, testkv)
-	})
+	}
 }
 
-func BenchmarkDB_KB(b *testing.B) {
-	db, closeDB, err := testDB("river-bench", DefaultOptions)
-	if err != nil {
-		panic(err)
-	}
-	testkv := testRandKV()
-
-	b.Cleanup(func() {
-		if err := closeDB(); err != nil {
-			panic(err)
-		}
-	})
-
-	b.Run("benchmarkDB_Put_value_1KB", func(b *testing.B) {
-		benchmarkDB_Put(b, db, testkv, types.KB)
-	})
-
-	b.Run("benchmarkDB_Put_value_16KB", func(b *testing.B) {
-		benchmarkDB_Put(b, db, testkv, types.KB*16)
-	})
-
-	b.Run("benchmarkDB_Put_value_64KB", func(b *testing.B) {
-		benchmarkDB_Put(b, db, testkv, types.KB*64)
-	})
-
-	b.Run("benchmarkDB_Put_value_256KB", func(b *testing.B) {
-		benchmarkDB_Put(b, db, testkv, types.KB*256)
-	})
-
-	b.Run("benchmarkDB_Put_value_512KB", func(b *testing.B) {
-		benchmarkDB_Put(b, db, testkv, types.KB*512)
-	})
-
-	b.Run("benchmarkDB_Get_KB", func(b *testing.B) {
-		benchmarkDB_Get(b, db, testkv)
-	})
-
-	b.Run("benchmarkDB_Del_KB", func(b *testing.B) {
-		benchmarkDB_Del(b, db, testkv)
-	})
+func BenchmarkDB_Get_1k(b *testing.B) {
+	testDB_Bench_Get(b, 1000)
 }
 
-func BenchmarkDB_MB(b *testing.B) {
-	db, closeDB, err := testDB("river-bench", DefaultOptions)
-	if err != nil {
-		panic(err)
-	}
-	testkv := testRandKV()
-
-	b.Cleanup(func() {
-		if err := closeDB(); err != nil {
-			panic(err)
-		}
-	})
-
-	b.Run("benchmarkDB_Put_value_1MB", func(b *testing.B) {
-		benchmarkDB_Put(b, db, testkv, types.MB)
-	})
-
-	b.Run("benchmarkDB_Put_value_8MB", func(b *testing.B) {
-		benchmarkDB_Put(b, db, testkv, types.MB*8)
-	})
-
-	b.Run("benchmarkDB_Put_value_16MB", func(b *testing.B) {
-		benchmarkDB_Put(b, db, testkv, types.MB*16)
-	})
-
-	b.Run("benchmarkDB_Put_value_32MB", func(b *testing.B) {
-		benchmarkDB_Put(b, db, testkv, types.MB*32)
-	})
-
-	b.Run("benchmarkDB_Put_value_64MB", func(b *testing.B) {
-		benchmarkDB_Put(b, db, testkv, types.MB*64)
-	})
-
-	b.Run("benchmarkDB_Get_MB", func(b *testing.B) {
-		benchmarkDB_Get(b, db, testkv)
-	})
-
-	b.Run("benchmarkDB_Del_MB", func(b *testing.B) {
-		benchmarkDB_Del(b, db, testkv)
-	})
+func BenchmarkDB_Get_1w(b *testing.B) {
+	testDB_Bench_Get(b, 1_0000)
 }
 
-func BenchmarkDB_Mixed(b *testing.B) {
-	db, closeDB, err := testDB("river-bench", DefaultOptions)
-	if err != nil {
-		panic(err)
-	}
-	testkv := testRandKV()
+func BenchmarkDB_Get_10w(b *testing.B) {
+	testDB_Bench_Get(b, 10_0000)
+}
 
-	b.Cleanup(func() {
-		if err := closeDB(); err != nil {
-			panic(err)
-		}
-	})
+func BenchmarkDB_Get_100w(b *testing.B) {
+	testDB_Bench_Get(b, 100_0000)
+}
 
-	b.Run("benchmarkDB_Put_Mixed_64B", func(b *testing.B) {
-		benchmarkDB_Put(b, db, testkv, types.B*64)
-	})
+// data num test
 
-	b.Run("benchmarkDB_Put_Mixed_128KB", func(b *testing.B) {
-		benchmarkDB_Put(b, db, testkv, types.KB*128)
-	})
+func BenchmarkDb_Put_1k(b *testing.B) {
+	testDB_Bench_Put(b, 1000, types.KB)
+}
 
-	b.Run("benchmarkDB_Put_Mixed_MB", func(b *testing.B) {
-		benchmarkDB_Put(b, db, testkv, types.MB)
-	})
+func BenchmarkDb_Put_1w(b *testing.B) {
+	testDB_Bench_Put(b, 1_0000, types.KB)
+}
 
-	b.Run("benchmarkDB_Get_Mixed", func(b *testing.B) {
-		benchmarkDB_Get(b, db, testkv)
-	})
+func BenchmarkDb_Put_10w(b *testing.B) {
+	testDB_Bench_Put(b, 10_0000, types.KB)
+}
 
-	b.Run("benchmarkDB_Del_Mixed", func(b *testing.B) {
-		benchmarkDB_Del(b, db, testkv)
-	})
+func BenchmarkDb_Put_100w(b *testing.B) {
+	testDB_Bench_Put(b, 100_0000, types.KB)
+}
+
+// data size test
+
+func BenchmarkDb_Put_256B(b *testing.B) {
+	testDB_Bench_Put(b, 1, types.B*256)
+}
+
+func BenchmarkDb_Put_64KB(b *testing.B) {
+	testDB_Bench_Put(b, 1, types.KB*64)
+}
+
+func BenchmarkDb_Put_256KB(b *testing.B) {
+	testDB_Bench_Put(b, 1, types.KB*256)
+}
+
+func BenchmarkDb_Put_1MB(b *testing.B) {
+	testDB_Bench_Put(b, 1, types.MB)
+}
+
+func BenchmarkDb_Put_4MB(b *testing.B) {
+	testDB_Bench_Put(b, 1, types.MB)
+}
+
+func BenchmarkDb_Put_8MB(b *testing.B) {
+	testDB_Bench_Put(b, 1, types.MB)
 }
