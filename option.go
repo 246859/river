@@ -28,7 +28,7 @@ var DefaultOptions = Options{
 	Compare:         index.DefaultCompare,
 	WatchSize:       2000,
 	WatchEvents:     []EventType{PutEvent, DelEvent},
-	MergeCheckpoint: 3.5,
+	MergeCheckpoint: 0,
 }
 
 // Option applying changes to the given option
