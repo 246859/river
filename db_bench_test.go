@@ -97,20 +97,24 @@ func BenchmarkDB_Get_100w(b *testing.B) {
 
 // data num test
 
-func BenchmarkDb_Put_1k(b *testing.B) {
+func BenchmarkDb_Put_1(b *testing.B) {
+	testDB_Bench_Put(b, 1, types.KB)
+}
+
+func BenchmarkDb_Put_100(b *testing.B) {
+	testDB_Bench_Put(b, 100, types.KB)
+}
+
+func BenchmarkDb_Put_1K(b *testing.B) {
 	testDB_Bench_Put(b, 1000, types.KB)
 }
 
-func BenchmarkDb_Put_1w(b *testing.B) {
+func BenchmarkDb_Put_1W(b *testing.B) {
 	testDB_Bench_Put(b, 1_0000, types.KB)
 }
 
-func BenchmarkDb_Put_10w(b *testing.B) {
+func BenchmarkDb_Put_10W(b *testing.B) {
 	testDB_Bench_Put(b, 10_0000, types.KB)
-}
-
-func BenchmarkDb_Put_100w(b *testing.B) {
-	testDB_Bench_Put(b, 100_0000, types.KB)
 }
 
 // data size test
