@@ -55,7 +55,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-    defer db.Close()
+	defer db.Close()
 	// put key-value pairs
 	err = db.Put([]byte("key"), []byte("value"), 0)
 	if err != nil {
@@ -211,6 +211,7 @@ func main() {
 	if err := batch.Flush(); err != nil {
 		panic(err)
 	}
+	fmt.Println(batch.Effected())
 }
 ```
 
@@ -355,7 +356,7 @@ set `Options.MergeCheckup=0` if you want to disable the default merge check up j
 
 
 ## benchmark
-
+all benchmark tests use the default options.
 ```
 goos: windows
 goarch: amd64
@@ -392,3 +393,8 @@ BenchmarkDb_Put_8MB-16               243           5230816 ns/op          777539
 PASS
 ok      github.com/246859/river 79.966s
 ```
+BenchmarkDB_Get_1k means that db use `db.Get()` to perform a random query based on the existing foundation of 1000 data entries in the database.
+
+BenchmarkDb_Put_1k means that db use `db.Put()` to put 1000 data entries into the database at once.
+
+BenchmarkDb_Put_256B means that db use `db.Put()` to put a data entry whose size is 256B.
