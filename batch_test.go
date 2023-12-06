@@ -215,6 +215,8 @@ func TestBatch_Cut(t *testing.T) {
 	err = batch.Flush()
 	assert.Nil(t, err)
 
+	assert.EqualValues(t, 1000, batch.Effected())
+
 	for _, sample := range samples {
 		value, err := db.Get(sample.K)
 		assert.Nil(t, err)

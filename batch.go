@@ -6,8 +6,8 @@ import (
 	"github.com/246859/river/pkg/str"
 	"github.com/246859/river/wal"
 	"github.com/pkg/errors"
-	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -58,6 +58,12 @@ type Batch struct {
 	pendingPool sync.Pool
 
 	closed bool
+
+	effected atomic.Int64
+}
+
+func (ba *Batch) Effected() int64 {
+	return ba.effected.Load()
 }
 
 func (ba *Batch) writeAll(rs []Record, et entry.EType) error {
@@ -67,8 +73,9 @@ func (ba *Batch) writeAll(rs []Record, et entry.EType) error {
 		// cut records into per batch by BatchOption.Size
 		var batchRecord []Record
 		if int64(len(rs)) < ba.opt.Size {
-			batchRecord = rs
+			batchRecord = rs[:]
 			lrs -= int64(len(rs))
+			rs = rs[:0:0]
 		} else {
 			batchRecord = rs[:ba.opt.Size:ba.opt.Size]
 			rs = rs[ba.opt.Size:]
@@ -80,7 +87,7 @@ func (ba *Batch) writeAll(rs []Record, et entry.EType) error {
 			estimatedSize += wal.EstimateBlockSize(int64(entry.MaxHeaderSize + len(record.K) + len(record.V)))
 			// if this batch is reach to the max size, cut it.
 			if estimatedSize >= int64(float64(ba.db.option.MaxSize)*0.92) {
-				rs = slices.Insert(rs, 0, batchRecord[i:]...)
+				rs = append(batchRecord[i:], rs...)
 				lrs += int64(len(batchRecord) - i)
 				batchRecord = batchRecord[:i]
 				break
@@ -243,5 +250,7 @@ func (b *batchTxn) commit(needSync bool) error {
 	if err := b.txn.commit(); err != nil {
 		return err
 	}
+
+	b.ba.effected.Add(int64(len(es)))
 	return nil
 }
