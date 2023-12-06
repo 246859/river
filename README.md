@@ -363,35 +363,37 @@ goarch: amd64
 pkg: github.com/246859/river
 cpu: 11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz
 BenchmarkDB_Get_1k
-BenchmarkDB_Get_1k-16             367923              3188 ns/op            1575 B/op         10 allocs/op
+BenchmarkDB_Get_1k-16             375000              3194 ns/op            1598 B/op         10 allocs/op
 BenchmarkDB_Get_1w
-BenchmarkDB_Get_1w-16             364064              3304 ns/op            2140 B/op         10 allocs/op
+BenchmarkDB_Get_1w-16             362989              3211 ns/op            2153 B/op         10 allocs/op
 BenchmarkDB_Get_10w
-BenchmarkDB_Get_10w-16            148518              7604 ns/op           12200 B/op         10 allocs/op
+BenchmarkDB_Get_10w-16            151460              7520 ns/op           12284 B/op         10 allocs/op
 BenchmarkDB_Get_100w
-BenchmarkDB_Get_100w-16            69440             17838 ns/op           32789 B/op         12 allocs/op
-BenchmarkDb_Put_1k
-BenchmarkDb_Put_1k-16                 79          13911381 ns/op         5965862 B/op      34059 allocs/op
-BenchmarkDb_Put_1w
-BenchmarkDb_Put_1w-16                  8         137385188 ns/op        59874926 B/op     340384 allocs/op
-BenchmarkDb_Put_10w
-BenchmarkDb_Put_10w-16                 1        1328774200 ns/op        618986752 B/op   3407017 allocs/op
-BenchmarkDb_Put_100w
-BenchmarkDb_Put_100w-16                1        13500072100 ns/op       6189542936 B/op 34068784 allocs/op
+BenchmarkDB_Get_100w-16            60800             19827 ns/op           32790 B/op         12 allocs/op
+BenchmarkDb_Put_1
+BenchmarkDb_Put_1-16              106227             16909 ns/op            6236 B/op         34 allocs/op
+BenchmarkDb_Put_100
+BenchmarkDb_Put_100-16               871           1449504 ns/op          601988 B/op       3405 allocs/op
+BenchmarkDb_Put_1K
+BenchmarkDb_Put_1K-16                 81          14566722 ns/op         5995953 B/op      34065 allocs/op
+BenchmarkDb_Put_1W
+BenchmarkDb_Put_1W-16                  8         166566838 ns/op        59862081 B/op     340381 allocs/op
+BenchmarkDb_Put_10W
+BenchmarkDb_Put_10W-16                 1        1431037500 ns/op        618953960 B/op   3407025 allocs/op
 BenchmarkDb_Put_256B
-BenchmarkDb_Put_256B-16           142414              9996 ns/op            5465 B/op         34 allocs/op
+BenchmarkDb_Put_256B-16           107794             10583 ns/op            5658 B/op         34 allocs/op
 BenchmarkDb_Put_64KB
-BenchmarkDb_Put_64KB-16             7975            540736 ns/op           72214 B/op         36 allocs/op
+BenchmarkDb_Put_64KB-16             4440            473349 ns/op           55333 B/op         35 allocs/op
 BenchmarkDb_Put_256KB
-BenchmarkDb_Put_256KB-16            1705           1671027 ns/op          213913 B/op         40 allocs/op
+BenchmarkDb_Put_256KB-16           10000            840960 ns/op          106526 B/op         37 allocs/op
 BenchmarkDb_Put_1MB
-BenchmarkDb_Put_1MB-16              1255           2947766 ns/op          535097 B/op         50 allocs/op
+BenchmarkDb_Put_1MB-16               720           4849446 ns/op          653983 B/op         53 allocs/op
 BenchmarkDb_Put_4MB
-BenchmarkDb_Put_4MB-16               427           5633411 ns/op         1028939 B/op         63 allocs/op
+BenchmarkDb_Put_4MB-16               411           6401892 ns/op         1462057 B/op         69 allocs/op
 BenchmarkDb_Put_8MB
-BenchmarkDb_Put_8MB-16               243           5230816 ns/op          777539 B/op         56 allocs/op
+BenchmarkDb_Put_8MB-16               462           4738826 ns/op          613061 B/op         52 allocs/op
 PASS
-ok      github.com/246859/river 79.966s
+ok      github.com/246859/river 71.723s
 ```
 BenchmarkDB_Get_1k means that db use `db.Get()` to perform a random query based on the existing foundation of 1000 data entries in the database.
 
