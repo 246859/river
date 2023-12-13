@@ -1,0 +1,32 @@
+# server address
+address = ":6868"
+
+# server password
+password = "abcdefhijklmnopqrstuvwxyz"
+
+# max data files size, default 64MB
+max_file_size = 67108864
+
+# how many blocks will be cached, default 64
+block_cache = 64
+
+# call fsync on per write operation
+fsync_per_write = false
+
+# default write threshold to trigger fsync, default 32kb
+fsync_threshold = 32768
+
+# transaction level
+# 1 -- serializable
+# 2 -- readcommitted
+txn_level = 1
+
+# checkpoint to trigger merge operation
+merge_checkpoint = 4.5
+
+# log output file
+log_file = "/var/lib/river/db.log"
+
+# log level
+log_level = "INFO"
+
