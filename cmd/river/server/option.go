@@ -11,6 +11,7 @@ const (
 )
 
 type Options struct {
+	Version string
 	// server listen address
 	Address string `toml:"address"`
 	// server password
@@ -36,8 +37,8 @@ type Options struct {
 	LogLevel string `toml:"log_level"`
 }
 
-// readOption Reads option from the specified path
-func readOption(cfgpath string) (Options, error) {
+// ReadOption Reads option from the specified path
+func ReadOption(cfgpath string) (Options, error) {
 	var opt Options
 
 	if _, err := os.Stat(cfgpath); err != nil {

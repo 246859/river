@@ -3,7 +3,7 @@ package server
 import (
 	"context"
 	riverdb "github.com/246859/river"
-	"github.com/246859/river/cmd/grpc/riverpb"
+	"github.com/246859/river/cmd/riverserver/riverpb"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

@@ -6,6 +6,6 @@ import (
 )
 
 func TestReadOption(t *testing.T) {
-	_, err := readOption("./config.toml")
+	_, err := ReadOption("./config.toml")
 	assert.Nil(t, err)
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	riverdb "github.com/246859/river"
-	"github.com/246859/river/cmd/grpc/riverpb"
+	"github.com/246859/river/cmd/riverserver/riverpb"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -19,17 +19,7 @@ var (
 )
 
 // NewServer return a new grpc server for river db
-func NewServer(ctx context.Context, cfgpath string) (*Server, error) {
-	var option Options
-
-	if len(cfgpath) > 0 {
-		readOpt, err := readOption(cfgpath)
-		if err != nil {
-			return nil, err
-		}
-		option = readOpt
-	}
-
+func NewServer(ctx context.Context, option Options) (*Server, error) {
 	if len(option.Address) == 0 {
 		option.Address = ":6868"
 	}
@@ -79,8 +69,7 @@ type Server struct {
 	opt   Options
 	dbopt riverdb.Options
 
-	ctx context.Context
-
+	ctx    context.Context
 	db     *riverdb.DB
 	server *grpc.Server
 	logger *Logger
@@ -94,6 +83,14 @@ func (s *Server) init() error {
 	var initErr error
 	// make sure init once
 	s.once.Do(func() {
+		logger, err := newLogger(s.opt.LogFile, s.opt.LogLevel)
+		if err != nil {
+			initErr = err
+			return
+		}
+		s.logger = logger
+		s.logger.Info("db server initializing...", "version", s.opt.Version)
+
 		// initialize db
 		db, err := riverdb.OpenWithCtx(s.ctx, s.dbopt)
 		if err != nil {
@@ -101,16 +98,9 @@ func (s *Server) init() error {
 			return
 		}
 		s.db = db
-
-		logger, err := newLogger(s.opt.LogFile, s.opt.LogLevel)
-		if err != nil {
-			initErr = err
-			return
-		}
-		s.logger = logger
+		s.logger.Info("db loaded √")
 
 		var grpcopts []grpc.ServerOption
-
 		// interceptor
 		grpcopts = append(grpcopts, grpc.ChainUnaryInterceptor(LogInterceptor(s)))
 		if len(s.opt.Password) > 0 {
@@ -131,6 +121,7 @@ func (s *Server) init() error {
 		s.server = grpc.NewServer(grpcopts...)
 		// register services
 		riverpb.RegisterRiverServer(s.server, s)
+		s.logger.Info("grpc server loaded √")
 	})
 	return initErr
 }

@@ -4,17 +4,21 @@ import (
 	"context"
 	"flag"
 	"github.com/246859/river/assets"
-	"github.com/246859/river/cmd/grpc/server"
+	"github.com/246859/river/cmd/river/server"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 )
 
-var configfile string
+var (
+	Version    string
+	ConfigFile string
+)
 
 func init() {
-	flag.StringVar(&configfile, "f", "", "specified configuration file")
+	flag.StringVar(&ConfigFile, "f", "", "specified configuration file")
+	flag.Parse()
 }
 
 func main() {
@@ -25,7 +29,19 @@ func main() {
 	// log banner
 	_ = assets.OutFsFile(assets.Fs, "banner.txt", os.Stdout)
 
-	riverServer, err := server.NewServer(ctx, configfile)
+	// red config file
+	var option server.Options
+	if len(ConfigFile) > 0 {
+		options, err := server.ReadOption(ConfigFile)
+		if err != nil {
+			slog.Error("", "err", err)
+			return
+		}
+		option = options
+	}
+	option.Version = Version
+
+	riverServer, err := server.NewServer(ctx, option)
 	if err != nil {
 		slog.Error("river grpc server boot failed", err.Error())
 	}

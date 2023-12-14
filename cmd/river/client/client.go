@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/sha1"
 	riverdb "github.com/246859/river"
-	"github.com/246859/river/cmd/grpc/riverpb"
+	"github.com/246859/river/cmd/riverserver/riverpb"
 	"github.com/246859/river/entry"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -19,10 +19,9 @@ import (
 
 func requirePassInterceptor(pass string) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-		hash := sha1.New()
-		hash.Write([]byte(pass))
-		metadata.AppendToOutgoingContext(ctx, "river.requirepass", string(hash.Sum(nil)))
-		return nil
+		sum := sha1.Sum([]byte(pass))
+		ctx = metadata.AppendToOutgoingContext(ctx, "river.requirepass-bin", string(sum[:]))
+		return invoker(ctx, method, req, reply, cc, opts...)
 	}
 }
 
@@ -68,16 +67,24 @@ func NewClient(ctx context.Context, opt Options) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Client{opt: opt, cnn: riverpb.NewRiverClient(conn)}, nil
+	return &Client{
+		opt:    opt,
+		cnn:    conn,
+		client: riverpb.NewRiverClient(conn)}, nil
 }
 
 type Client struct {
-	opt Options
-	cnn riverpb.RiverClient
+	opt    Options
+	cnn    *grpc.ClientConn
+	client riverpb.RiverClient
 }
 
-func (c Client) Get(ctx context.Context, key []byte) ([]byte, error) {
-	result, err := c.cnn.Get(ctx, &riverpb.RawData{Data: key})
+func (c *Client) Close() error {
+	return c.cnn.Close()
+}
+
+func (c *Client) Get(ctx context.Context, key []byte) ([]byte, error) {
+	result, err := c.client.Get(ctx, &riverpb.RawData{Data: key})
 	if err != nil {
 		return nil, err
 	}
@@ -91,8 +98,8 @@ func (c Client) Get(ctx context.Context, key []byte) ([]byte, error) {
 	return result.Data, nil
 }
 
-func (c Client) TTL(ctx context.Context, key []byte) (time.Duration, error) {
-	result, err := c.cnn.TTL(ctx, &riverpb.RawData{Data: key})
+func (c *Client) TTL(ctx context.Context, key []byte) (time.Duration, error) {
+	result, err := c.client.TTL(ctx, &riverpb.RawData{Data: key})
 	if err != nil {
 		return 0, err
 	}
@@ -106,32 +113,32 @@ func (c Client) TTL(ctx context.Context, key []byte) (time.Duration, error) {
 	return entry.LeftTTl(result.Ttl), nil
 }
 
-func (c Client) Put(ctx context.Context, key []byte, value []byte, ttl time.Duration) (bool, error) {
-	result, err := c.cnn.Put(ctx, &riverpb.Record{Key: key, Value: value, Ttl: ttl.Milliseconds()})
+func (c *Client) Put(ctx context.Context, key []byte, value []byte, ttl time.Duration) (bool, error) {
+	result, err := c.client.Put(ctx, &riverpb.Record{Key: key, Value: value, Ttl: ttl.Milliseconds()})
 	if err != nil {
 		return false, err
 	}
 	return result.Ok, nil
 }
 
-func (c Client) Exp(ctx context.Context, key []byte, ttl time.Duration) (bool, error) {
-	result, err := c.cnn.Exp(ctx, &riverpb.ExpRecord{Key: key, Ttl: ttl.Milliseconds()})
+func (c *Client) Exp(ctx context.Context, key []byte, ttl time.Duration) (bool, error) {
+	result, err := c.client.Exp(ctx, &riverpb.ExpRecord{Key: key, Ttl: ttl.Milliseconds()})
 	if err != nil {
 		return false, err
 	}
 	return result.Ok, nil
 }
 
-func (c Client) Del(ctx context.Context, key []byte) (bool, error) {
-	result, err := c.cnn.Del(ctx, &riverpb.RawData{Data: key})
+func (c *Client) Del(ctx context.Context, key []byte) (bool, error) {
+	result, err := c.client.Del(ctx, &riverpb.RawData{Data: key})
 	if err != nil {
 		return false, err
 	}
 	return result.Ok, nil
 }
 
-func (c Client) Stat(ctx context.Context) (*riverdb.Stats, error) {
-	stat, err := c.cnn.Stat(ctx, &emptypb.Empty{})
+func (c *Client) Stat(ctx context.Context) (*riverdb.Stats, error) {
+	stat, err := c.client.Stat(ctx, &emptypb.Empty{})
 	if err != nil {
 		return nil, err
 	}
