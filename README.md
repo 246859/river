@@ -22,6 +22,7 @@ RiverDB is a light-weight embeddable key-value nosql database, it is base on bit
 - event watcher
 - batch write and delete
 - targzip backup and recover from backup
+- grpc supported, to see [river-server](./cmd/river/README.md)
 
 RiverDB can be used as a standalone database or as an underlying storage engine.
 
