@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+option go_package = ".;riverpb";
+
+import "google/protobuf/any.proto";
+import "google/protobuf/empty.proto";
+
+message RawData {
+  bytes data = 1;
+}
+
+message Record {
+  bytes key = 1;
+  bytes value = 2;
+  int64 ttl = 3;
+}
+
+message ExpRecord {
+  bytes key = 1;
+  int64 ttl = 3;
+}
+
+message DataResult {
+  bool ok = 1;
+  bytes data = 2;
+}
+
+message TTLResult {
+  bool ok = 1;
+  int64 ttl = 2;
+}
+
+message InfoResult {
+  bool ok = 1;
+}
+
+message Status {
+  int64 keys = 1;
+  int64 records = 2;
+  int64 datasize = 3;
+  int64 hintsize = 4;
+}
+
+message BatchPutOption {
+  repeated Record records = 1;
+  int64 batchSize = 2;
+}
+
+message BatchResult {
+  bool ok = 1;
+  int64 effected = 2;
+}
+
+message BatchDelOption {
+  repeated bytes keys = 1;
+  int64 batchSize = 2;
+}
+
+message RangeOption {
+  bytes minKey = 1;
+  bytes maxKey = 2;
+  bytes pattern = 3;
+  bool descend = 4;
+}
+
+message RangeResult {
+  repeated bytes keys = 1;
+  int64  count = 2;
+}
+
+service River {
+  rpc Get(RawData) returns(DataResult);
+  rpc TTL(RawData) returns(TTLResult);
+  rpc Put(Record) returns(InfoResult);
+  rpc PutInBatch(BatchPutOption) returns(BatchResult);
+  rpc Exp(ExpRecord) returns(InfoResult);
+  rpc Del(RawData) returns(InfoResult);
+  rpc DelInBatch(BatchDelOption) returns(BatchResult);
+  rpc Stat(google.protobuf.Empty) returns(Status);
+  rpc Range(RangeOption) returns(RangeResult);
+}
