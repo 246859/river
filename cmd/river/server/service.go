@@ -78,6 +78,63 @@ func (s *Server) Del(ctx context.Context, data *riverpb.RawData) (*riverpb.InfoR
 	return &riverpb.InfoResult{Ok: true}, nil
 }
 
+func (s *Server) PutInBatch(ctx context.Context, opt *riverpb.BatchPutOption) (*riverpb.BatchResult, error) {
+	batch, err := s.db.Batch(riverdb.BatchOption{
+		Size:        opt.BatchSize,
+		SyncOnFlush: true,
+	})
+
+	if err != nil {
+		return &riverpb.BatchResult{Ok: false}, status.Errorf(codes.InvalidArgument, "batch options invalid")
+	}
+
+	var records []riverdb.Record
+	for _, record := range opt.Records {
+		records = append(records, riverdb.Record{
+			K:   record.Key,
+			V:   record.Value,
+			TTL: time.Duration(record.Ttl),
+		})
+	}
+
+	if err := batch.WriteAll(records); err != nil {
+		return &riverpb.BatchResult{Ok: false}, err
+	}
+
+	if err := batch.Flush(); err != nil {
+		return &riverpb.BatchResult{Ok: false}, err
+	}
+
+	return &riverpb.BatchResult{
+		Ok:       true,
+		Effected: batch.Effected(),
+	}, nil
+}
+
+func (s *Server) DelInBatch(ctx context.Context, opt *riverpb.BatchDelOption) (*riverpb.BatchResult, error) {
+	batch, err := s.db.Batch(riverdb.BatchOption{
+		Size:        opt.BatchSize,
+		SyncOnFlush: true,
+	})
+
+	if err != nil {
+		return &riverpb.BatchResult{Ok: false}, status.Errorf(codes.InvalidArgument, "batch options invalid")
+	}
+
+	if err := batch.DeleteAll(opt.Keys); err != nil {
+		return &riverpb.BatchResult{Ok: false}, err
+	}
+
+	if err := batch.Flush(); err != nil {
+		return &riverpb.BatchResult{Ok: false}, err
+	}
+
+	return &riverpb.BatchResult{
+		Ok:       true,
+		Effected: batch.Effected(),
+	}, nil
+}
+
 func (s *Server) Stat(context.Context, *emptypb.Empty) (*riverpb.Status, error) {
 	stats := s.db.Stats()
 	return &riverpb.Status{

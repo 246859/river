@@ -20,12 +20,14 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	River_Get_FullMethodName  = "/River/Get"
-	River_TTL_FullMethodName  = "/River/TTL"
-	River_Put_FullMethodName  = "/River/Put"
-	River_Exp_FullMethodName  = "/River/Exp"
-	River_Del_FullMethodName  = "/River/Del"
-	River_Stat_FullMethodName = "/River/Stat"
+	River_Get_FullMethodName        = "/River/Get"
+	River_TTL_FullMethodName        = "/River/TTL"
+	River_Put_FullMethodName        = "/River/Put"
+	River_PutInBatch_FullMethodName = "/River/PutInBatch"
+	River_Exp_FullMethodName        = "/River/Exp"
+	River_Del_FullMethodName        = "/River/Del"
+	River_DelInBatch_FullMethodName = "/River/DelInBatch"
+	River_Stat_FullMethodName       = "/River/Stat"
 )
 
 // RiverClient is the client API for River service.
@@ -35,8 +37,10 @@ type RiverClient interface {
 	Get(ctx context.Context, in *RawData, opts ...grpc.CallOption) (*DataResult, error)
 	TTL(ctx context.Context, in *RawData, opts ...grpc.CallOption) (*TTLResult, error)
 	Put(ctx context.Context, in *Record, opts ...grpc.CallOption) (*InfoResult, error)
+	PutInBatch(ctx context.Context, in *BatchPutOption, opts ...grpc.CallOption) (*BatchResult, error)
 	Exp(ctx context.Context, in *ExpRecord, opts ...grpc.CallOption) (*InfoResult, error)
 	Del(ctx context.Context, in *RawData, opts ...grpc.CallOption) (*InfoResult, error)
+	DelInBatch(ctx context.Context, in *BatchDelOption, opts ...grpc.CallOption) (*BatchResult, error)
 	Stat(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*Status, error)
 }
 
@@ -75,6 +79,15 @@ func (c *riverClient) Put(ctx context.Context, in *Record, opts ...grpc.CallOpti
 	return out, nil
 }
 
+func (c *riverClient) PutInBatch(ctx context.Context, in *BatchPutOption, opts ...grpc.CallOption) (*BatchResult, error) {
+	out := new(BatchResult)
+	err := c.cc.Invoke(ctx, River_PutInBatch_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *riverClient) Exp(ctx context.Context, in *ExpRecord, opts ...grpc.CallOption) (*InfoResult, error) {
 	out := new(InfoResult)
 	err := c.cc.Invoke(ctx, River_Exp_FullMethodName, in, out, opts...)
@@ -87,6 +100,15 @@ func (c *riverClient) Exp(ctx context.Context, in *ExpRecord, opts ...grpc.CallO
 func (c *riverClient) Del(ctx context.Context, in *RawData, opts ...grpc.CallOption) (*InfoResult, error) {
 	out := new(InfoResult)
 	err := c.cc.Invoke(ctx, River_Del_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *riverClient) DelInBatch(ctx context.Context, in *BatchDelOption, opts ...grpc.CallOption) (*BatchResult, error) {
+	out := new(BatchResult)
+	err := c.cc.Invoke(ctx, River_DelInBatch_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -109,8 +131,10 @@ type RiverServer interface {
 	Get(context.Context, *RawData) (*DataResult, error)
 	TTL(context.Context, *RawData) (*TTLResult, error)
 	Put(context.Context, *Record) (*InfoResult, error)
+	PutInBatch(context.Context, *BatchPutOption) (*BatchResult, error)
 	Exp(context.Context, *ExpRecord) (*InfoResult, error)
 	Del(context.Context, *RawData) (*InfoResult, error)
+	DelInBatch(context.Context, *BatchDelOption) (*BatchResult, error)
 	Stat(context.Context, *emptypb.Empty) (*Status, error)
 	mustEmbedUnimplementedRiverServer()
 }
@@ -128,11 +152,17 @@ func (UnimplementedRiverServer) TTL(context.Context, *RawData) (*TTLResult, erro
 func (UnimplementedRiverServer) Put(context.Context, *Record) (*InfoResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Put not implemented")
 }
+func (UnimplementedRiverServer) PutInBatch(context.Context, *BatchPutOption) (*BatchResult, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PutInBatch not implemented")
+}
 func (UnimplementedRiverServer) Exp(context.Context, *ExpRecord) (*InfoResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Exp not implemented")
 }
 func (UnimplementedRiverServer) Del(context.Context, *RawData) (*InfoResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Del not implemented")
+}
+func (UnimplementedRiverServer) DelInBatch(context.Context, *BatchDelOption) (*BatchResult, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DelInBatch not implemented")
 }
 func (UnimplementedRiverServer) Stat(context.Context, *emptypb.Empty) (*Status, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Stat not implemented")
@@ -204,6 +234,24 @@ func _River_Put_Handler(srv interface{}, ctx context.Context, dec func(interface
 	return interceptor(ctx, in, info, handler)
 }
 
+func _River_PutInBatch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BatchPutOption)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RiverServer).PutInBatch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: River_PutInBatch_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RiverServer).PutInBatch(ctx, req.(*BatchPutOption))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _River_Exp_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ExpRecord)
 	if err := dec(in); err != nil {
@@ -236,6 +284,24 @@ func _River_Del_Handler(srv interface{}, ctx context.Context, dec func(interface
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(RiverServer).Del(ctx, req.(*RawData))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _River_DelInBatch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BatchDelOption)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RiverServer).DelInBatch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: River_DelInBatch_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RiverServer).DelInBatch(ctx, req.(*BatchDelOption))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -278,12 +344,20 @@ var River_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _River_Put_Handler,
 		},
 		{
+			MethodName: "PutInBatch",
+			Handler:    _River_PutInBatch_Handler,
+		},
+		{
 			MethodName: "Exp",
 			Handler:    _River_Exp_Handler,
 		},
 		{
 			MethodName: "Del",
 			Handler:    _River_Del_Handler,
+		},
+		{
+			MethodName: "DelInBatch",
+			Handler:    _River_DelInBatch_Handler,
 		},
 		{
 			MethodName: "Stat",

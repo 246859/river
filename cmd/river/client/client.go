@@ -116,6 +116,18 @@ func (c *Client) Put(ctx context.Context, key []byte, value []byte, ttl time.Dur
 	return result.Ok, nil
 }
 
+func (c *Client) PutInBatch(ctx context.Context, rs []*riverpb.Record, batchSize int64) (int64, error) {
+	result, err := c.client.PutInBatch(ctx, &riverpb.BatchPutOption{
+		Records:   rs,
+		BatchSize: batchSize,
+	})
+
+	if err != nil {
+		return result.Effected, err
+	}
+	return result.Effected, nil
+}
+
 func (c *Client) Exp(ctx context.Context, key []byte, ttl time.Duration) (bool, error) {
 	result, err := c.client.Exp(ctx, &riverpb.ExpRecord{Key: key, Ttl: ttl.Milliseconds()})
 	if err != nil {
@@ -130,6 +142,18 @@ func (c *Client) Del(ctx context.Context, key []byte) (bool, error) {
 		return false, err
 	}
 	return result.Ok, nil
+}
+
+func (c *Client) DelInBatch(ctx context.Context, keys [][]byte, batchSize int64) (int64, error) {
+	result, err := c.client.DelInBatch(ctx, &riverpb.BatchDelOption{
+		Keys:      keys,
+		BatchSize: batchSize,
+	})
+
+	if err != nil {
+		return result.Effected, err
+	}
+	return result.Effected, nil
 }
 
 func (c *Client) Stat(ctx context.Context) (*riverdb.Stats, error) {

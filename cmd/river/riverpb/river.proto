@@ -41,11 +41,28 @@ message Status {
   int64 hintsize = 4;
 }
 
+message BatchPutOption {
+  repeated Record records = 1;
+  int64 batchSize = 2;
+}
+
+message BatchResult {
+  bool ok = 1;
+  int64 effected = 2;
+}
+
+message BatchDelOption {
+  repeated bytes keys = 1;
+  int64 batchSize = 2;
+}
+
 service River {
   rpc Get(RawData) returns(DataResult);
   rpc TTL(RawData) returns(TTLResult);
   rpc Put(Record) returns(InfoResult);
+  rpc PutInBatch(BatchPutOption) returns(BatchResult);
   rpc Exp(ExpRecord) returns(InfoResult);
   rpc Del(RawData) returns(InfoResult);
+  rpc DelInBatch(BatchDelOption) returns(BatchResult);
   rpc Stat(google.protobuf.Empty) returns(Status);
 }
