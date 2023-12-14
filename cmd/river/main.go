@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"github.com/246859/river/assets"
 	"github.com/246859/river/cmd/river/server"
 	"log/slog"
@@ -47,7 +48,7 @@ func main() {
 	// initialize the server
 	riverServer, err := server.NewServer(ctx, option)
 	if err != nil {
-		slog.Error("river grpc server boot failed", err.Error())
+		slog.Error(fmt.Sprintf("river grpc server boot failed %s", err.Error()))
 	}
 	defer func() {
 		if riverServer != nil {
