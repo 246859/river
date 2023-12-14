@@ -11,8 +11,11 @@ import (
 
 func LogInterceptor(s *Server) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
-		s.logger.Debug(info.FullMethod)
-		return handler(ctx, req)
+		resp, err = handler(ctx, req)
+		if err != nil {
+			s.logger.Error(info.FullMethod, "error", err)
+		}
+		return
 	}
 }
 

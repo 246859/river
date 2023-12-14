@@ -56,6 +56,18 @@ message BatchDelOption {
   int64 batchSize = 2;
 }
 
+message RangeOption {
+  bytes minKey = 1;
+  bytes maxKey = 2;
+  bytes pattern = 3;
+  bool descend = 4;
+}
+
+message RangeResult {
+  repeated bytes keys = 1;
+  int64  count = 2;
+}
+
 service River {
   rpc Get(RawData) returns(DataResult);
   rpc TTL(RawData) returns(TTLResult);
@@ -65,4 +77,5 @@ service River {
   rpc Del(RawData) returns(InfoResult);
   rpc DelInBatch(BatchDelOption) returns(BatchResult);
   rpc Stat(google.protobuf.Empty) returns(Status);
+  rpc Range(RangeOption) returns(RangeResult);
 }

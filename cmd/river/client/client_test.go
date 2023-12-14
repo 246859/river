@@ -1,11 +1,13 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	riverdb "github.com/246859/river"
 	"github.com/246859/river/cmd/river/riverpb"
 	"github.com/stretchr/testify/assert"
+	"slices"
 	"testing"
 	"time"
 )
@@ -208,5 +210,54 @@ func TestClient_PutInBatch(t *testing.T) {
 	for _, r := range rs {
 		_, err := client.Get(context.Background(), r.Key)
 		assert.ErrorIs(t, err, riverdb.ErrKeyNotFound)
+	}
+}
+
+func TestClient_Range(t *testing.T) {
+	timeout, cancelFunc := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelFunc()
+	client, err := NewClient(timeout, Options{
+		Target:   "localhost:6868",
+		Password: "abcdefhijklmnopqrstuvwxyz",
+	})
+	assert.Nil(t, err)
+	if err != nil {
+		return
+	}
+	defer client.Close()
+
+	var rs []*riverpb.Record
+	for i := 0; i < 10; i++ {
+		rs = append(rs, &riverpb.Record{
+			Key:   []byte(fmt.Sprintf("a-%d", i)),
+			Value: []byte("hello world"),
+			Ttl:   0,
+		})
+	}
+
+	var ks [][]byte
+	for _, r := range rs {
+		ks = append(ks, r.Key)
+	}
+
+	// put all
+	effected, err := client.PutInBatch(context.Background(), rs, int64(len(rs)))
+	assert.Nil(t, err)
+	assert.EqualValues(t, int64(len(rs)), effected)
+
+	keys, err := client.Range(context.Background(), &riverpb.RangeOption{
+		MinKey:  rs[0].Key,
+		MaxKey:  rs[len(rs)-1].Key,
+		Pattern: nil,
+		Descend: false,
+	})
+	t.Log(err)
+	assert.Nil(t, err)
+
+	for _, key := range keys {
+		has := slices.ContainsFunc(ks, func(bs []byte) bool {
+			return bytes.Equal(key, bs)
+		})
+		assert.True(t, has)
 	}
 }

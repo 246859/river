@@ -25,10 +25,8 @@ func requirePassInterceptor(pass string) grpc.UnaryClientInterceptor {
 }
 
 type Options struct {
-	Target string
-
-	Password   string
-	ReqTimeout time.Duration
+	Target   string
+	Password string
 
 	TlsCert   string
 	TlsDomain string
@@ -37,10 +35,6 @@ type Options struct {
 func NewClient(ctx context.Context, opt Options) (*Client, error) {
 	if len(opt.Target) == 0 {
 		return nil, errors.New("target must be specified")
-	}
-
-	if opt.ReqTimeout == 0 {
-		opt.ReqTimeout = time.Second * 20
 	}
 
 	var dialopts []grpc.DialOption
@@ -168,4 +162,12 @@ func (c *Client) Stat(ctx context.Context) (*riverdb.Stats, error) {
 		DataSize:   stat.Datasize,
 		HintSize:   stat.Hintsize,
 	}, nil
+}
+
+func (c *Client) Range(ctx context.Context, option *riverpb.RangeOption) ([]riverdb.Key, error) {
+	result, err := c.client.Range(ctx, option)
+	if err != nil {
+		return nil, err
+	}
+	return result.Keys, nil
 }
