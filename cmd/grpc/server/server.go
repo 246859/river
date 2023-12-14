@@ -113,7 +113,7 @@ func (s *Server) init() error {
 
 		// interceptor
 		grpcopts = append(grpcopts, grpc.ChainUnaryInterceptor(LogInterceptor(s)))
-		if len(s.opt.Password) >= 0 {
+		if len(s.opt.Password) > 0 {
 			grpcopts = append(grpcopts, grpc.ChainUnaryInterceptor(RequirePassInterceptor(s)))
 		}
 

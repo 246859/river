@@ -37,6 +37,8 @@ func main() {
 
 	select {
 	case <-ctx.Done():
-		riverServer.Close()
+		if riverServer != nil {
+			riverServer.Close()
+		}
 	}
 }

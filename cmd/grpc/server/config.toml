@@ -28,5 +28,5 @@ merge_checkpoint = 4.5
 log_file = "/var/lib/river/db.log"
 
 # log level
-log_level = "INFO"
+log_level = "DEBUG"
 
