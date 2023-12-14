@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/sha1"
 	riverdb "github.com/246859/river"
-	"github.com/246859/river/cmd/riverserver/riverpb"
+	"github.com/246859/river/cmd/river/riverpb"
 	"github.com/246859/river/entry"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"

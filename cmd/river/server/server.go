@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	riverdb "github.com/246859/river"
-	"github.com/246859/river/cmd/riverserver/riverpb"
+	"github.com/246859/river/cmd/river/riverpb"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
