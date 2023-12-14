@@ -89,7 +89,8 @@ func (s *Server) init() error {
 			return
 		}
 		s.logger = logger
-		s.logger.Info("db server initializing...", "version", s.opt.Version)
+		s.logger.Info(fmt.Sprintf("version: %s", s.opt.Version))
+		s.logger.Info("db server initializing...")
 
 		// initialize db
 		db, err := riverdb.OpenWithCtx(s.ctx, s.dbopt)
@@ -150,7 +151,10 @@ func (s *Server) Close() error {
 		return ErrClosed
 	}
 	s.closed.Store(true)
-	s.logger.Info("river server closed")
+
+	if s.logger != nil {
+		s.logger.Info("river server closed")
+	}
 
 	if s.server != nil {
 		s.server.GracefulStop()

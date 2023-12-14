@@ -37,24 +37,38 @@ func main() {
 			slog.Error("", "err", err)
 			return
 		}
+		slog.Info("config file loaded √")
 		option = options
+	} else {
+		slog.Info("no config file specified")
 	}
 	option.Version = Version
 
+	// initialize the server
 	riverServer, err := server.NewServer(ctx, option)
 	if err != nil {
 		slog.Error("river grpc server boot failed", err.Error())
 	}
-	defer riverServer.Close()
-
-	go func() {
-		riverServer.Run()
+	defer func() {
+		if riverServer != nil {
+			riverServer.Close()
+		}
 	}()
 
+	// run the server in another goroutine
+	runCh := make(chan error)
+	go func() {
+		runCh <- riverServer.Run()
+		close(runCh)
+	}()
+
+	// close when recv os ignals or run failed
 	select {
 	case <-ctx.Done():
 		if riverServer != nil {
 			riverServer.Close()
 		}
+	case err := <-runCh:
+		slog.Error("river server run failed", "error", err)
 	}
 }
