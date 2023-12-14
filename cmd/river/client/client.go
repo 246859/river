@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	riverdb "github.com/246859/river"
 	"github.com/246859/river/cmd/river/riverpb"
-	"github.com/246859/river/entry"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -85,14 +84,12 @@ func (c *Client) Close() error {
 
 func (c *Client) Get(ctx context.Context, key []byte) ([]byte, error) {
 	result, err := c.client.Get(ctx, &riverpb.RawData{Data: key})
-	if err != nil {
-		return nil, err
-	}
-
 	// if not found
 	stat, ok := status.FromError(err)
 	if ok && stat.Code() == codes.NotFound {
 		return nil, riverdb.ErrKeyNotFound
+	} else if err != nil {
+		return nil, err
 	}
 
 	return result.Data, nil
@@ -100,17 +97,15 @@ func (c *Client) Get(ctx context.Context, key []byte) ([]byte, error) {
 
 func (c *Client) TTL(ctx context.Context, key []byte) (time.Duration, error) {
 	result, err := c.client.TTL(ctx, &riverpb.RawData{Data: key})
-	if err != nil {
-		return 0, err
-	}
-
 	// if not found
 	stat, ok := status.FromError(err)
 	if ok && stat.Code() == codes.NotFound {
 		return 0, riverdb.ErrKeyNotFound
+	} else if err != nil {
+		return 0, err
 	}
 
-	return entry.LeftTTl(result.Ttl), nil
+	return time.Duration(result.Ttl), nil
 }
 
 func (c *Client) Put(ctx context.Context, key []byte, value []byte, ttl time.Duration) (bool, error) {
